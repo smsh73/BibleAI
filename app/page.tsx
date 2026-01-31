@@ -309,6 +309,14 @@ export default function Home() {
   const [verseReferences, setVerseReferences] = useState<VerseReference[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // 미디어 생성 상태 (위로 이미지 + 팟캐스트 오디오)
+  const [comfortImage, setComfortImage] = useState<string | null>(null)
+  const [podcastAudio, setPodcastAudio] = useState<string | null>(null)
+  const [mediaLoading, setMediaLoading] = useState<{ image: boolean; audio: boolean }>({
+    image: false,
+    audio: false
+  })
+
   // 성경 버전 상태
   const [selectedVersion, setSelectedVersion] = useState<string>('GAE')
   const [availableVersions, setAvailableVersions] = useState<{
@@ -454,12 +462,67 @@ export default function Home() {
           }
         }
       }
+      // 응답 완료 후 미디어 자동 생성
+      if (assistantMessage) {
+        generateMedia(userMessage.content, assistantMessage, verseReferences)
+      }
     } catch (error) {
       console.error('Chat error:', error)
       alert('오류가 발생했습니다. 다시 시도해주세요.')
     } finally {
       setLoading(false)
     }
+  }
+
+  // 위로 이미지 및 팟캐스트 오디오 생성
+  async function generateMedia(question: string, answer: string, verses: VerseReference[]) {
+    // 이전 미디어 초기화
+    setComfortImage(null)
+    setPodcastAudio(null)
+
+    const verseRefs = verses.map(v => v.reference)
+
+    // 이미지와 오디오 병렬 생성
+    setMediaLoading({ image: true, audio: true })
+
+    // 이미지 생성
+    fetch('/api/generate-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        answer,
+        verseReferences: verseRefs,
+        emotion
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setComfortImage(data.imageUrl)
+        }
+      })
+      .catch(err => console.error('Image generation error:', err))
+      .finally(() => setMediaLoading(prev => ({ ...prev, image: false })))
+
+    // 오디오 생성
+    fetch('/api/generate-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        answer,
+        verseReferences: verseRefs
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setPodcastAudio(data.audioUrl)
+        }
+      })
+      .catch(err => console.error('Audio generation error:', err))
+      .finally(() => setMediaLoading(prev => ({ ...prev, audio: false })))
   }
 
   // 뉴스 AI 챗봇 제출
@@ -951,6 +1014,73 @@ export default function Home() {
                         </a>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* 위로 미디어 섹션 (이미지 + 오디오) */}
+                {!loading && messages.length > 0 && (comfortImage || podcastAudio || mediaLoading.image || mediaLoading.audio) && (
+                  <div className="animate-fade-in mt-6 space-y-4">
+                    {/* 위로 이미지 */}
+                    {(comfortImage || mediaLoading.image) && (
+                      <div className="bg-white/95 rounded-xl p-4 border border-amber-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-3">
+                          <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="text-sm font-medium text-amber-800">
+                            {language === 'en' ? 'Comfort Image' : '위로 이미지'}
+                          </span>
+                        </div>
+                        {mediaLoading.image ? (
+                          <div className="flex items-center justify-center h-48 bg-amber-50 rounded-lg">
+                            <div className="text-center">
+                              <div className="animate-spin w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full mx-auto mb-2" />
+                              <p className="text-sm text-amber-600">
+                                {language === 'en' ? 'Generating image...' : '이미지를 생성하고 있습니다...'}
+                              </p>
+                            </div>
+                          </div>
+                        ) : comfortImage ? (
+                          <img
+                            src={comfortImage}
+                            alt="Comfort image"
+                            className="w-full max-w-md mx-auto rounded-lg shadow-md"
+                          />
+                        ) : null}
+                      </div>
+                    )}
+
+                    {/* 팟캐스트 오디오 */}
+                    {(podcastAudio || mediaLoading.audio) && (
+                      <div className="bg-white/95 rounded-xl p-4 border border-amber-100 shadow-sm">
+                        <div className="flex items-center gap-2 mb-3">
+                          <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                          <span className="text-sm font-medium text-amber-800">
+                            {language === 'en' ? 'Pastor\'s Message' : '목사님 음성 메시지'}
+                          </span>
+                        </div>
+                        {mediaLoading.audio ? (
+                          <div className="flex items-center justify-center h-16 bg-amber-50 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <div className="animate-spin w-6 h-6 border-3 border-amber-500 border-t-transparent rounded-full" />
+                              <p className="text-sm text-amber-600">
+                                {language === 'en' ? 'Generating audio...' : '오디오를 생성하고 있습니다...'}
+                              </p>
+                            </div>
+                          </div>
+                        ) : podcastAudio ? (
+                          <audio
+                            controls
+                            src={podcastAudio}
+                            className="w-full"
+                          >
+                            Your browser does not support the audio element.
+                          </audio>
+                        ) : null}
+                      </div>
+                    )}
                   </div>
                 )}
 
