@@ -2,6 +2,8 @@
  * 뉴스 처리 스트리밍 API (실시간 진행상황 표시)
  * POST /api/news/process-stream
  * - Server-Sent Events로 진행상황 스트리밍
+ * - 증분 스캔: DB 캐시 우선 사용, 신규만 웹 스캔
+ * - Graceful stop: 현재 항목 완료 후 중지
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -25,6 +27,83 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_KEY!
 )
+
+/**
+ * 중지 요청 확인
+ */
+async function checkStopRequested(): Promise<boolean> {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/task-lock`)
+    const data = await res.json()
+    return data.stopRequested === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 진행 상태 업데이트 (task-lock에 현재 작업 정보 전송)
+ */
+async function updateTaskProgress(currentItem: string, processedCount: number, totalCount: number): Promise<void> {
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/task-lock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'progress',
+        currentItem,
+        processedCount,
+        totalCount
+      })
+    })
+  } catch {
+    // 실패해도 계속 진행
+  }
+}
+
+/**
+ * DB에서 기존 스캔된 호수 목록 조회
+ */
+async function getCachedIssues(): Promise<IssueInfo[]> {
+  try {
+    const { data, error } = await supabase
+      .from('news_issues')
+      .select('issue_number, issue_date, year, month, board_id, page_count, status')
+      .order('issue_number', { ascending: false })
+
+    if (error) throw error
+
+    return (data || []).map(row => ({
+      boardId: row.board_id,
+      issueNumber: row.issue_number,
+      issueDate: row.issue_date,
+      year: row.year,
+      month: row.month,
+      imageUrls: [], // DB에는 이미지 URL 저장 안함, 필요시 다시 가져옴
+      status: row.status
+    }))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * 최신 호수 번호 조회 (DB 캐시 기준)
+ */
+async function getLatestCachedIssueNumber(): Promise<number> {
+  try {
+    const { data } = await supabase
+      .from('news_issues')
+      .select('issue_number')
+      .order('issue_number', { ascending: false })
+      .limit(1)
+      .single()
+
+    return data?.issue_number || 0
+  } catch {
+    return 0
+  }
+}
 
 /**
  * 벡터 인덱스 동기화 (IVFFLAT 인덱스 갱신)
@@ -64,6 +143,7 @@ interface IssueInfo {
   year: number
   month: number
   imageUrls: string[]
+  status?: string  // DB에서 가져온 상태: pending, processing, completed, failed
 }
 
 /**
@@ -365,7 +445,8 @@ async function downloadImage(imageUrl: string): Promise<Buffer> {
 
 export async function POST(req: NextRequest) {
   // maxIssues 기본값 0 = 제한 없음 (모든 미처리 호수 처리)
-  const { action, issueNumber, maxIssues = 0, config = {} } = await req.json()
+  // fullRescan: true면 기존 스캔 정보 무시하고 전체 재스캔
+  const { action, issueNumber, maxIssues = 0, fullRescan = false, config = {} } = await req.json()
 
   // URL 설정 추출 (유연한 방식 + 레거시 호환)
   const urlConfig: UrlConfig = {
@@ -374,7 +455,7 @@ export async function POST(req: NextRequest) {
     endUrl: config.endUrl,
     baseUrl: config.baseUrl || DEFAULT_BASE_URL,
     boardId: config.boardId || DEFAULT_BOARD_ID,
-    maxPages: config.maxPages || 5
+    maxPages: config.maxPages || 10  // 기본값 10페이지로 증가
   }
 
   const encoder = new TextEncoder()
@@ -387,14 +468,45 @@ export async function POST(req: NextRequest) {
 
       try {
         if (action === 'process_incremental') {
-          send({ type: 'start', message: '증분 처리 시작...' })
+          send({ type: 'start', message: fullRescan ? '전체 재스캔 시작...' : '증분 처리 시작...' })
 
-          // 스캔 (유연한 방식)
-          send({ type: 'progress', step: 'scan', message: '호수 목록 스캔 중...', percent: 5 })
+          let issues: IssueInfo[] = []
 
-          const issues = await scanAllIssues(urlConfig, send)
+          if (fullRescan) {
+            // 전체 재스캔: 기존 pending/failed 상태만 삭제 (completed는 유지)
+            send({ type: 'progress', step: 'clear', message: '미처리 스캔 정보 초기화 중...', percent: 2 })
+            await supabase.from('news_issues').delete().in('status', ['pending', 'failed'])
 
-          send({ type: 'progress', step: 'scan', message: `${issues.length}개 호수 발견`, percent: 10 })
+            send({ type: 'progress', step: 'scan', message: '전체 호수 목록 웹 스캔 중...', percent: 5 })
+            issues = await scanAllIssues(urlConfig, send)
+          } else {
+            // 증분 스캔: DB 캐시 확인 후 신규만 웹 스캔
+            send({ type: 'progress', step: 'cache', message: 'DB 캐시 확인 중...', percent: 3 })
+            const cachedIssues = await getCachedIssues()
+            const latestCached = await getLatestCachedIssueNumber()
+
+            if (cachedIssues.length > 0) {
+              send({ type: 'progress', step: 'cache', message: `DB에 ${cachedIssues.length}개 호수 캐시됨 (최신: ${latestCached}호)`, percent: 5 })
+
+              // 신규 호수만 웹에서 스캔 (최신 캐시보다 새로운 것만)
+              send({ type: 'progress', step: 'scan', message: '신규 호수 스캔 중...', percent: 7 })
+              const webIssues = await scanAllIssues(urlConfig, send)
+              const newIssues = webIssues.filter(i => i.issueNumber > latestCached)
+
+              if (newIssues.length > 0) {
+                send({ type: 'progress', step: 'scan', message: `${newIssues.length}개 신규 호수 발견`, percent: 10 })
+              }
+
+              // 캐시된 것 + 신규 병합
+              issues = [...newIssues, ...cachedIssues]
+            } else {
+              // 캐시 없으면 전체 웹 스캔
+              send({ type: 'progress', step: 'scan', message: '호수 목록 웹 스캔 중...', percent: 5 })
+              issues = await scanAllIssues(urlConfig, send)
+            }
+          }
+
+          send({ type: 'progress', step: 'scan', message: `총 ${issues.length}개 호수`, percent: 10 })
 
           // 미처리 호수 필터링
           // maxIssues가 지정되지 않거나 0이면 모든 미처리 호수를 처리
@@ -418,19 +530,58 @@ export async function POST(req: NextRequest) {
 
           // 각 호수 처리
           const results: any[] = []
+          let stoppedByUser = false
+
           for (let i = 0; i < pendingIssues.length; i++) {
-            const issue = pendingIssues[i]
+            // 중지 요청 확인 (각 호수 시작 전)
+            if (await checkStopRequested()) {
+              stoppedByUser = true
+              send({
+                type: 'stopped',
+                message: `사용자 요청으로 중지됨. ${i}개 호수 완료, ${pendingIssues.length - i}개 남음.`,
+                processedCount: i,
+                remainingCount: pendingIssues.length - i,
+                results
+              })
+              break
+            }
+
+            let issue = pendingIssues[i]
             const basePercent = 15 + (i / pendingIssues.length) * 80
+
+            // 진행 상태 업데이트 (task-lock에 현재 작업 정보 전송)
+            await updateTaskProgress(issue.issueDate, i, pendingIssues.length)
 
             send({
               type: 'progress',
               step: 'issue_start',
               message: `${issue.issueDate} 처리 시작 (${i + 1}/${pendingIssues.length})`,
               percent: basePercent,
-              issueDate: issue.issueDate
+              issueDate: issue.issueDate,
+              processedCount: i,
+              totalCount: pendingIssues.length
             })
 
             try {
+              // 캐시된 호수인 경우 이미지 URL이 없으므로 웹에서 가져옴
+              if (!issue.imageUrls || issue.imageUrls.length === 0) {
+                send({
+                  type: 'progress',
+                  step: 'fetch_images',
+                  message: `${issue.issueDate} - 이미지 URL 가져오는 중...`,
+                  percent: basePercent + 1
+                })
+
+                const origin = extractOrigin(urlConfig.baseUrl || DEFAULT_BASE_URL)
+                const detailUrl = `${origin}/Board/Detail/${urlConfig.boardId || DEFAULT_BOARD_ID}/${issue.boardId}`
+                const freshIssue = await fetchIssueDetailsByUrl(detailUrl)
+                if (freshIssue && freshIssue.imageUrls.length > 0) {
+                  issue = { ...issue, imageUrls: freshIssue.imageUrls }
+                } else {
+                  throw new Error('이미지 URL을 가져올 수 없습니다')
+                }
+              }
+
               // 이슈 저장
               const issueId = await saveNewsIssue({
                 issue_number: issue.issueNumber,
@@ -614,13 +765,15 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // 완료
-          send({
-            type: 'complete',
-            message: '모든 처리 완료',
-            percent: 100,
-            results
-          })
+          // 완료 (중지된 경우가 아닐 때만)
+          if (!stoppedByUser) {
+            send({
+              type: 'complete',
+              message: '모든 처리 완료',
+              percent: 100,
+              results
+            })
+          }
         }
 
         controller.close()

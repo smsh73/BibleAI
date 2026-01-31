@@ -81,7 +81,14 @@ export default function NewsPage() {
     taskType?: string
     description?: string
     elapsedMinutes?: number
+    stopRequested?: boolean
+    currentItem?: string
+    processedCount?: number
+    totalCount?: number
   }>({ locked: false })
+
+  // 중지 요청 중 상태
+  const [stopRequesting, setStopRequesting] = useState(false)
 
   // 자동 스크롤
   useEffect(() => {
@@ -241,13 +248,42 @@ export default function NewsPage() {
     }
   }
 
-  // 스캔 실행
-  async function handleScan() {
+  // 중지 요청 실행
+  async function handleStopRequest() {
+    if (stopRequesting) return
+
+    setStopRequesting(true)
+    try {
+      const res = await fetch('/api/admin/task-lock', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'stop',
+          taskType: 'news'
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setProgressLogs(prev => [...prev, '[중지] 중지 요청됨. 현재 호수 처리 완료 후 중지됩니다...'])
+        alert('중지 요청됨. 현재 호수 처리 완료 후 중지됩니다.')
+      }
+    } catch (error: any) {
+      alert('중지 요청 실패: ' + error.message)
+    } finally {
+      setStopRequesting(false)
+    }
+  }
+
+  // 스캔 실행 (fullRescan: true면 전체 재스캔)
+  async function handleScan(fullRescan: boolean = false) {
     setCrawlLoading(true)
     setProgressLogs([])
-    setProgressMessage('호수 목록 스캔 중...')
+    setProgressMessage(fullRescan ? '전체 재스캔 중...' : '증분 스캔 중...')
     setProgressPercent(10)
-    setProgressLogs(prev => [...prev, '[스캔] 웹사이트에서 호수 목록을 가져오는 중...'])
+    setProgressLogs(prev => [...prev, fullRescan
+      ? '[스캔] 기존 미처리 정보 삭제 후 전체 웹 스캔 중...'
+      : '[스캔] DB 캐시 확인 후 신규 호수만 스캔 중...'
+    ])
 
     try {
       const res = await fetch('/api/news/process', {
@@ -255,6 +291,7 @@ export default function NewsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'scan',
+          fullRescan,
           config: {
             listPageUrl,
             startUrl: startUrl || undefined,
@@ -359,6 +396,22 @@ export default function NewsPage() {
                 setProgressMessage('처리 완료!')
                 setCrawlResults(data.results || [])
                 loadStatus()
+                // 처리된 호수의 상태 업데이트
+                const processedNumbers = (data.results || [])
+                  .filter((r: any) => r.success)
+                  .map((r: any) => r.issueNumber)
+                setScannedIssues(prev => prev.map(issue =>
+                  processedNumbers.includes(issue.issueNumber)
+                    ? { ...issue, status: 'completed' }
+                    : issue
+                ))
+              } else if (data.type === 'stopped') {
+                // 사용자 요청으로 중지됨
+                setProgressPercent(95)
+                setProgressMessage(`중지됨: ${data.processedCount}개 완료, ${data.remainingCount}개 남음`)
+                setCrawlResults(data.results || [])
+                loadStatus()
+                setProgressLogs(prev => [...prev, `[중지] 사용자 요청으로 중지됨. ${data.processedCount}개 완료.`])
                 // 처리된 호수의 상태 업데이트
                 const processedNumbers = (data.results || [])
                   .filter((r: any) => r.success)
@@ -647,23 +700,44 @@ export default function NewsPage() {
 
             {/* 뉴스 추출 진행 중 배너 */}
             {taskLock.locked && taskLock.taskType === 'news' && (
-              <div className="bg-indigo-50 border border-indigo-300 rounded-xl p-4 flex items-center gap-3">
-                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+              <div className={`${taskLock.stopRequested ? 'bg-orange-50 border-orange-300' : 'bg-indigo-50 border-indigo-300'} border rounded-xl p-4 flex items-center gap-3`}>
+                <div className={`w-8 h-8 ${taskLock.stopRequested ? 'bg-orange-100' : 'bg-indigo-100'} rounded-full flex items-center justify-center flex-shrink-0`}>
+                  {taskLock.stopRequested ? (
+                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : (
+                    <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                  )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-indigo-800">
-                    뉴스 추출 작업이 백그라운드에서 진행 중입니다
+                  <p className={`font-medium ${taskLock.stopRequested ? 'text-orange-800' : 'text-indigo-800'}`}>
+                    {taskLock.stopRequested
+                      ? '중지 요청됨 - 현재 호수 처리 완료 후 중지됩니다'
+                      : '뉴스 추출 작업이 백그라운드에서 진행 중입니다'
+                    }
                   </p>
-                  <p className="text-sm text-indigo-700">
-                    {taskLock.description && `${taskLock.description}`}
+                  <p className={`text-sm ${taskLock.stopRequested ? 'text-orange-700' : 'text-indigo-700'}`}>
+                    {taskLock.currentItem && `현재: ${taskLock.currentItem}`}
+                    {taskLock.processedCount !== undefined && taskLock.totalCount !== undefined && ` • ${taskLock.processedCount}/${taskLock.totalCount}개 완료`}
                     {taskLock.elapsedMinutes !== undefined && ` • ${taskLock.elapsedMinutes}분 경과`}
-                    {crawlStatus && ` • 현재 ${crawlStatus.completedIssues}개 호수, ${crawlStatus.totalChunks.toLocaleString()}개 청크 완료`}
                   </p>
                   <p className="text-xs text-indigo-600 mt-1">
-                    브라우저를 닫아도 작업은 계속됩니다. 완료될 때까지 기다려 주세요.
+                    {taskLock.stopRequested
+                      ? '현재 호수 처리 및 벡터 인덱스 동기화 후 중지됩니다.'
+                      : '브라우저를 닫아도 작업은 계속됩니다.'
+                    }
                   </p>
                 </div>
+                {!taskLock.stopRequested && (
+                  <button
+                    onClick={handleStopRequest}
+                    disabled={stopRequesting}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                  >
+                    {stopRequesting ? '요청 중...' : '중지'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -782,14 +856,21 @@ export default function NewsPage() {
 
               <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={handleScan}
-                  disabled={crawlLoading}
+                  onClick={() => handleScan(false)}
+                  disabled={crawlLoading || taskLock.locked}
                   className="px-6 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm transition-colors"
                 >
-                  {crawlLoading ? '스캔 중...' : '호수 목록 스캔'}
+                  {crawlLoading ? '스캔 중...' : taskLock.locked ? '다른 작업 진행 중' : '증분 스캔'}
+                </button>
+                <button
+                  onClick={() => handleScan(true)}
+                  disabled={crawlLoading || taskLock.locked}
+                  className="px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm transition-colors"
+                >
+                  전체 재스캔
                 </button>
                 <span className="flex items-center text-sm text-gray-500">
-                  스캔 후 아래에서 처리할 호수를 선택할 수 있습니다
+                  증분 스캔: 신규만 / 전체 재스캔: 기존 캐시 무시
                 </span>
               </div>
 

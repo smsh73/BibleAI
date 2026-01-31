@@ -4,6 +4,7 @@
  *
  * GET: 현재 잠금 상태 조회
  * POST: 잠금 획득 시도
+ * PATCH: 중지 요청 (graceful stop)
  * DELETE: 잠금 해제
  */
 
@@ -19,6 +20,7 @@ interface TaskLock {
   started_by?: string
   description?: string
   is_active: boolean
+  stop_requested?: boolean
 }
 
 // 잠금 테이블이 없으면 메모리 기반 잠금 사용
@@ -26,10 +28,18 @@ let memoryLock: {
   taskType: TaskType | null
   startedAt: Date | null
   description: string | null
+  stopRequested: boolean
+  currentItem: string | null  // 현재 처리 중인 항목 (예: "504호", "2026-01-26 주보")
+  processedCount: number      // 처리 완료된 항목 수
+  totalCount: number          // 전체 처리 대상 수
 } = {
   taskType: null,
   startedAt: null,
-  description: null
+  description: null,
+  stopRequested: false,
+  currentItem: null,
+  processedCount: 0,
+  totalCount: 0
 }
 
 // 잠금 타임아웃 (2시간) - 작업이 비정상 종료된 경우 자동 해제
@@ -81,7 +91,11 @@ export async function GET() {
           taskType: data.task_type,
           startedAt: data.started_at,
           description: data.description,
-          elapsedMinutes: Math.floor((Date.now() - startedAt.getTime()) / 60000)
+          elapsedMinutes: Math.floor((Date.now() - startedAt.getTime()) / 60000),
+          stopRequested: data.stop_requested || memoryLock.stopRequested,
+          currentItem: memoryLock.currentItem,
+          processedCount: memoryLock.processedCount,
+          totalCount: memoryLock.totalCount
         })
       }
 
@@ -199,6 +213,63 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * PATCH: 중지 요청 또는 진행 상태 업데이트
+ * - action: 'stop' - 중지 요청
+ * - action: 'progress' - 진행 상태 업데이트
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { action, taskType, currentItem, processedCount, totalCount } = body
+
+    if (action === 'stop') {
+      // 중지 요청
+      const client = getSupabaseAdmin()
+
+      if (client) {
+        await client
+          .from('task_locks')
+          .update({ stop_requested: true })
+          .eq('is_active', true)
+          .eq('task_type', taskType || memoryLock.taskType || '')
+          .catch(() => {})  // 테이블 없으면 무시
+      }
+
+      // 메모리 잠금에도 중지 요청 설정
+      if (memoryLock.taskType === taskType || !taskType) {
+        memoryLock.stopRequested = true
+      }
+
+      console.log(`[task-lock] 중지 요청됨: ${taskType || memoryLock.taskType}`)
+
+      return NextResponse.json({
+        success: true,
+        message: '중지 요청이 전송되었습니다. 현재 항목 처리 완료 후 중지됩니다.',
+        currentItem: memoryLock.currentItem
+      })
+    }
+
+    if (action === 'progress') {
+      // 진행 상태 업데이트
+      if (currentItem !== undefined) memoryLock.currentItem = currentItem
+      if (processedCount !== undefined) memoryLock.processedCount = processedCount
+      if (totalCount !== undefined) memoryLock.totalCount = totalCount
+
+      return NextResponse.json({ success: true })
+    }
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+
+  } catch (error: any) {
+    console.error('Task lock PATCH error:', error)
+    return NextResponse.json(
+      { error: error.message || 'Failed to update task' },
+      { status: 500 }
+    )
+  }
+}
+
+/**
  * DELETE: 잠금 해제
  */
 export async function DELETE(req: NextRequest) {
@@ -211,7 +282,7 @@ export async function DELETE(req: NextRequest) {
     if (client) {
       const { error } = await client
         .from('task_locks')
-        .update({ is_active: false })
+        .update({ is_active: false, stop_requested: false })
         .eq('is_active', true)
         .eq('task_type', taskType || '')
 
@@ -222,7 +293,15 @@ export async function DELETE(req: NextRequest) {
 
     // 메모리 잠금도 해제
     if (!taskType || memoryLock.taskType === taskType) {
-      memoryLock = { taskType: null, startedAt: null, description: null }
+      memoryLock = {
+        taskType: null,
+        startedAt: null,
+        description: null,
+        stopRequested: false,
+        currentItem: null,
+        processedCount: 0,
+        totalCount: 0
+      }
     }
 
     return NextResponse.json({
@@ -233,7 +312,15 @@ export async function DELETE(req: NextRequest) {
   } catch (error: any) {
     console.error('Task lock DELETE error:', error)
     // 에러가 나도 메모리 잠금 해제
-    memoryLock = { taskType: null, startedAt: null, description: null }
+    memoryLock = {
+      taskType: null,
+      startedAt: null,
+      description: null,
+      stopRequested: false,
+      currentItem: null,
+      processedCount: 0,
+      totalCount: 0
+    }
     return NextResponse.json({ success: true })
   }
 }
@@ -243,7 +330,15 @@ function getMemoryLockStatus() {
   if (memoryLock.taskType && memoryLock.startedAt) {
     // 타임아웃 체크
     if (Date.now() - memoryLock.startedAt.getTime() > LOCK_TIMEOUT_MS) {
-      memoryLock = { taskType: null, startedAt: null, description: null }
+      memoryLock = {
+        taskType: null,
+        startedAt: null,
+        description: null,
+        stopRequested: false,
+        currentItem: null,
+        processedCount: 0,
+        totalCount: 0
+      }
       return NextResponse.json({ locked: false })
     }
 
@@ -252,7 +347,11 @@ function getMemoryLockStatus() {
       taskType: memoryLock.taskType,
       startedAt: memoryLock.startedAt.toISOString(),
       description: memoryLock.description,
-      elapsedMinutes: Math.floor((Date.now() - memoryLock.startedAt.getTime()) / 60000)
+      elapsedMinutes: Math.floor((Date.now() - memoryLock.startedAt.getTime()) / 60000),
+      stopRequested: memoryLock.stopRequested,
+      currentItem: memoryLock.currentItem,
+      processedCount: memoryLock.processedCount,
+      totalCount: memoryLock.totalCount
     })
   }
 
@@ -283,11 +382,31 @@ function acquireMemoryLock(taskType: TaskType, description?: string) {
   memoryLock = {
     taskType,
     startedAt: new Date(),
-    description: description || null
+    description: description || null,
+    stopRequested: false,
+    currentItem: null,
+    processedCount: 0,
+    totalCount: 0
   }
 
   return NextResponse.json({
     success: true,
     message: '작업 잠금을 획득했습니다.'
   })
+}
+
+/**
+ * 중지 요청 확인 함수 (외부에서 import하여 사용)
+ */
+export function isStopRequested(): boolean {
+  return memoryLock.stopRequested
+}
+
+/**
+ * 진행 상태 업데이트 함수 (외부에서 import하여 사용)
+ */
+export function updateProgress(currentItem: string, processedCount: number, totalCount: number) {
+  memoryLock.currentItem = currentItem
+  memoryLock.processedCount = processedCount
+  memoryLock.totalCount = totalCount
 }

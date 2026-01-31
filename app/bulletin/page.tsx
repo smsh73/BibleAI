@@ -68,7 +68,14 @@ export default function BulletinPage() {
     taskType?: string
     description?: string
     elapsedMinutes?: number
+    stopRequested?: boolean
+    currentItem?: string
+    processedCount?: number
+    totalCount?: number
   }>({ locked: false })
+
+  // 중지 요청 중 상태
+  const [stopRequesting, setStopRequesting] = useState(false)
 
   // 자동 스크롤
   useEffect(() => {
@@ -228,10 +235,36 @@ export default function BulletinPage() {
     }
   }
 
-  // 스캔 실행
-  async function handleScan() {
+  // 중지 요청 실행
+  async function handleStopRequest() {
+    if (stopRequesting) return
+
+    setStopRequesting(true)
+    try {
+      const res = await fetch('/api/admin/task-lock', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'stop',
+          taskType: 'bulletin'
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setProgressMessage('중지 요청됨. 현재 주보 처리 완료 후 중지됩니다...')
+        alert('중지 요청됨. 현재 주보 처리 완료 후 중지됩니다.')
+      }
+    } catch (error: any) {
+      alert('중지 요청 실패: ' + error.message)
+    } finally {
+      setStopRequesting(false)
+    }
+  }
+
+  // 스캔 실행 (fullRescan: true면 전체 재스캔)
+  async function handleScan(fullRescan: boolean = false) {
     setCrawlLoading(true)
-    setProgressMessage('주보 목록 스캔 중...')
+    setProgressMessage(fullRescan ? '전체 재스캔 중...' : '증분 스캔 중...')
 
     try {
       const res = await fetch('/api/bulletin/process', {
@@ -239,6 +272,7 @@ export default function BulletinPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'scan',
+          fullRescan,
           config: { listPageUrl }
         })
       })
@@ -279,7 +313,11 @@ export default function BulletinPage() {
 
       if (data.success) {
         const successCount = data.results.filter((r: any) => r.success).length
-        setProgressMessage(`처리 완료: ${successCount}개 성공`)
+        if (data.stoppedByUser) {
+          setProgressMessage(`사용자 요청으로 중지됨: ${successCount}개 완료, ${data.remainingCount}개 남음`)
+        } else {
+          setProgressMessage(`처리 완료: ${successCount}개 성공`)
+        }
         loadStatus()
         handleScan() // 목록 새로고침
       } else {
@@ -517,23 +555,44 @@ export default function BulletinPage() {
 
             {/* 주보 추출 진행 중 배너 */}
             {taskLock.locked && taskLock.taskType === 'bulletin' && (
-              <div className="bg-green-50 border border-green-300 rounded-xl p-4 flex items-center gap-3">
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <div className="w-5 h-5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+              <div className={`${taskLock.stopRequested ? 'bg-orange-50 border-orange-300' : 'bg-green-50 border-green-300'} border rounded-xl p-4 flex items-center gap-3`}>
+                <div className={`w-8 h-8 ${taskLock.stopRequested ? 'bg-orange-100' : 'bg-green-100'} rounded-full flex items-center justify-center flex-shrink-0`}>
+                  {taskLock.stopRequested ? (
+                    <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : (
+                    <div className="w-5 h-5 border-2 border-green-600 border-t-transparent rounded-full animate-spin" />
+                  )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-green-800">
-                    주보 추출 작업이 백그라운드에서 진행 중입니다
+                  <p className={`font-medium ${taskLock.stopRequested ? 'text-orange-800' : 'text-green-800'}`}>
+                    {taskLock.stopRequested
+                      ? '중지 요청됨 - 현재 주보 처리 완료 후 중지됩니다'
+                      : '주보 추출 작업이 백그라운드에서 진행 중입니다'
+                    }
                   </p>
-                  <p className="text-sm text-green-700">
-                    {taskLock.description && `${taskLock.description}`}
+                  <p className={`text-sm ${taskLock.stopRequested ? 'text-orange-700' : 'text-green-700'}`}>
+                    {taskLock.currentItem && `현재: ${taskLock.currentItem}`}
+                    {taskLock.processedCount !== undefined && taskLock.totalCount !== undefined && ` • ${taskLock.processedCount}/${taskLock.totalCount}개 완료`}
                     {taskLock.elapsedMinutes !== undefined && ` • ${taskLock.elapsedMinutes}분 경과`}
-                    {crawlStatus && ` • 현재 ${crawlStatus.completedIssues}개 주보, ${crawlStatus.totalChunks.toLocaleString()}개 청크 완료`}
                   </p>
                   <p className="text-xs text-green-600 mt-1">
-                    브라우저를 닫아도 작업은 계속됩니다. 완료될 때까지 기다려 주세요.
+                    {taskLock.stopRequested
+                      ? '현재 주보 처리 및 벡터 인덱스 동기화 후 중지됩니다.'
+                      : '브라우저를 닫아도 작업은 계속됩니다.'
+                    }
                   </p>
                 </div>
+                {!taskLock.stopRequested && (
+                  <button
+                    onClick={handleStopRequest}
+                    disabled={stopRequesting}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+                  >
+                    {stopRequesting ? '요청 중...' : '중지'}
+                  </button>
+                )}
               </div>
             )}
 
@@ -587,12 +646,22 @@ export default function BulletinPage() {
 
               <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={handleScan}
-                  disabled={crawlLoading}
+                  onClick={() => handleScan(false)}
+                  disabled={crawlLoading || taskLock.locked}
                   className="px-6 py-2.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm transition-colors"
                 >
-                  {crawlLoading ? '스캔 중...' : '주보 목록 스캔'}
+                  {crawlLoading ? '스캔 중...' : taskLock.locked ? '다른 작업 진행 중' : '증분 스캔'}
                 </button>
+                <button
+                  onClick={() => handleScan(true)}
+                  disabled={crawlLoading || taskLock.locked}
+                  className="px-5 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm transition-colors"
+                >
+                  전체 재스캔
+                </button>
+                <span className="flex items-center text-sm text-gray-500">
+                  증분 스캔: 신규만 / 전체 재스캔: 기존 캐시 무시
+                </span>
               </div>
 
               {progressMessage && (

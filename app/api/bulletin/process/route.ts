@@ -2,6 +2,8 @@
  * 주보 처리 API
  * GET: 처리 현황 조회
  * POST: 스캔 및 처리 시작
+ * - 증분 스캔: DB 캐시 우선 사용, 신규만 웹 스캔
+ * - Graceful stop: 현재 항목 완료 후 중지
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,6 +19,59 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const BASE_URL = 'https://www.anyangjeil.org'
 const BOARD_ID = 65
+
+/**
+ * 중지 요청 확인
+ */
+async function checkStopRequested(): Promise<boolean> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const res = await fetch(`${baseUrl}/api/admin/task-lock`)
+    const data = await res.json()
+    return data.stopRequested === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 진행 상태 업데이트 (task-lock에 현재 작업 정보 전송)
+ */
+async function updateTaskProgress(currentItem: string, processedCount: number, totalCount: number): Promise<void> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    await fetch(`${baseUrl}/api/admin/task-lock`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'progress',
+        currentItem,
+        processedCount,
+        totalCount
+      })
+    })
+  } catch {
+    // 실패해도 계속 진행
+  }
+}
+
+/**
+ * 최신 캐시된 주보 날짜 조회
+ */
+async function getLatestCachedBulletinDate(): Promise<string | null> {
+  try {
+    const { data } = await supabase
+      .from('bulletin_issues')
+      .select('bulletin_date')
+      .order('bulletin_date', { ascending: false })
+      .limit(1)
+      .single()
+
+    return data?.bulletin_date || null
+  } catch {
+    return null
+  }
+}
 
 // OCR 프롬프트 (주보용)
 const OCR_PROMPT = `이 이미지는 한국 교회의 주보(예배순서지)의 한 페이지입니다.
@@ -272,19 +327,51 @@ async function syncVectorIndex(): Promise<void> {
 // POST: 스캔 및 처리
 export async function POST(req: NextRequest) {
   try {
-    const { action, config, maxIssues } = await req.json()
+    const { action, config, maxIssues, fullRescan = false } = await req.json()
     const listPageUrl = config?.listPageUrl || `${BASE_URL}/Board/Index/${BOARD_ID}`
 
     if (action === 'scan') {
-      // 주보 목록 스캔
+      // 전체 리스캔인 경우 미처리 스캔 정보 삭제
+      if (fullRescan) {
+        console.log('[bulletin/process] 전체 재스캔 - 미처리 스캔 정보 삭제 중...')
+        await supabase.from('bulletin_issues').delete().in('status', ['pending', 'failed'])
+      }
+
+      // DB에 캐시된 주보 확인
+      const { data: cachedIssues } = await supabase
+        .from('bulletin_issues')
+        .select('bulletin_date')
+        .order('bulletin_date', { ascending: false })
+
+      const cachedDates = new Set((cachedIssues || []).map(i => i.bulletin_date))
+      const latestCached = await getLatestCachedBulletinDate()
+
+      console.log(`[bulletin/process] DB 캐시: ${cachedDates.size}개 주보 (최신: ${latestCached || '없음'})`)
+
+      // 주보 목록 스캔 (웹에서)
       const allBulletins: any[] = []
+      let foundCached = false
 
       for (let page = 1; page <= 60; page++) {
         const bulletins = await fetchBulletinsFromPage(page, listPageUrl)
         if (bulletins.length === 0) break
-        allBulletins.push(...bulletins)
+
+        for (const bulletin of bulletins) {
+          // 이미 캐시된 주보를 만나면 증분 스캔 종료 (전체 리스캔이 아닌 경우)
+          if (!fullRescan && cachedDates.has(bulletin.bulletinDate)) {
+            foundCached = true
+            break
+          }
+          if (!cachedDates.has(bulletin.bulletinDate)) {
+            allBulletins.push(bulletin)
+          }
+        }
+
+        if (foundCached && !fullRescan) break
         await new Promise(r => setTimeout(r, 300))
       }
+
+      console.log(`[bulletin/process] 웹 스캔: ${allBulletins.length}개 신규 주보 발견`)
 
       // 중복 제거
       const uniqueBulletins = allBulletins.filter((b, index, self) =>
@@ -294,27 +381,19 @@ export async function POST(req: NextRequest) {
       // DB에 저장
       let newCount = 0
       for (const bulletin of uniqueBulletins) {
-        const { data: existing } = await supabase
+        const { error } = await supabase
           .from('bulletin_issues')
-          .select('id')
-          .eq('bulletin_date', bulletin.bulletinDate)
-          .single()
-
-        if (!existing) {
-          const { error } = await supabase
-            .from('bulletin_issues')
-            .insert({
-              bulletin_date: bulletin.bulletinDate,
-              title: bulletin.title,
-              board_id: bulletin.boardId,
-              year: bulletin.year,
-              month: bulletin.month,
-              day: bulletin.day,
-              page_count: bulletin.pageCount,
-              status: 'pending'
-            })
-          if (!error) newCount++
-        }
+          .insert({
+            bulletin_date: bulletin.bulletinDate,
+            title: bulletin.title,
+            board_id: bulletin.boardId,
+            year: bulletin.year,
+            month: bulletin.month,
+            day: bulletin.day,
+            page_count: bulletin.pageCount,
+            status: 'pending'
+          })
+        if (!error) newCount++
       }
 
       // 현재 상태 조회
@@ -332,6 +411,7 @@ export async function POST(req: NextRequest) {
         pending: pending.length,
         completed: completed.length,
         newSaved: newCount,
+        fullRescan,
         issues: allIssues?.map(i => ({
           bulletinDate: i.bulletin_date,
           title: i.title,
@@ -379,9 +459,25 @@ export async function POST(req: NextRequest) {
 
       try {
         const results: any[] = []
+        let stoppedByUser = false
 
         for (let bulletinIdx = 0; bulletinIdx < pendingBulletins.length; bulletinIdx++) {
+          // 중지 요청 확인 (각 주보 시작 전)
+          if (await checkStopRequested()) {
+            stoppedByUser = true
+            console.log(`[bulletin/process] 사용자 요청으로 중지됨. ${bulletinIdx}개 완료, ${pendingBulletins.length - bulletinIdx}개 남음.`)
+            break
+          }
+
           const bulletin = pendingBulletins[bulletinIdx]
+
+          // 진행 상태 업데이트
+          await updateTaskProgress(
+            bulletin.bulletin_date,
+            bulletinIdx,
+            pendingBulletins.length
+          )
+
           console.log(`[bulletin/process] 주보 처리 중 (${bulletinIdx + 1}/${pendingBulletins.length}): ${bulletin.bulletin_date}`)
 
           try {
@@ -450,6 +546,9 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({
           success: true,
+          stoppedByUser,
+          processedCount: results.length,
+          remainingCount: stoppedByUser ? pendingBulletins.length - results.length : 0,
           results
         })
       } catch (error) {
