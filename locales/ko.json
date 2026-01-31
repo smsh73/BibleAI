@@ -1,0 +1,102 @@
+{
+  "common": {
+    "home": "홈",
+    "verseMap": "성경지도",
+    "sermon": "설교",
+    "news": "신문",
+    "bulletin": "주보",
+    "admin": "관리",
+    "loading": "로딩 중...",
+    "refresh": "새로고침",
+    "send": "전송",
+    "cancel": "취소",
+    "confirm": "확인",
+    "search": "검색",
+    "close": "닫기"
+  },
+  "bible": {
+    "title": "AI 성경 상담",
+    "greeting": "평안하세요",
+    "greetingSubtitle": "마음의 이야기를 나눠주세요",
+    "inputPlaceholder": "마음을 나눠주세요...",
+    "versionLabel": "성경:",
+    "suggestions": {
+      "hard": "마음이 힘들어요",
+      "grateful": "감사하고 싶어요",
+      "forgive": "용서가 어려워요",
+      "anxious": "미래가 불안해요"
+    },
+    "emotions": {
+      "depressed": "우울해요",
+      "anxious": "불안해요",
+      "angry": "화가 나요",
+      "grateful": "감사해요",
+      "joyful": "기뻐요",
+      "lonely": "외로워요",
+      "fearful": "두려워요",
+      "hopeful": "희망적이에요"
+    },
+    "relatedVerses": "관련 구절",
+    "sermonClips": "관련 설교"
+  },
+  "news": {
+    "title": "열한시 AI",
+    "greeting": "열한시 뉴스에 대해 물어보세요",
+    "inputPlaceholder": "교회 소식을 물어보세요...",
+    "yearLabel": "연도:",
+    "allYears": "전체",
+    "suggestions": {
+      "recent": "최근 교회 소식이 궁금해요",
+      "events": "다가오는 행사가 있나요?",
+      "mission": "선교 활동에 대해 알려주세요"
+    },
+    "sources": "참고 기사"
+  },
+  "bulletin": {
+    "title": "주보 AI",
+    "greeting": "주보 내용을 물어보세요",
+    "inputPlaceholder": "주보 내용을 물어보세요...",
+    "suggestions": {
+      "thisWeek": "이번 주 예배 일정이 어떻게 되나요?",
+      "announcements": "공지사항을 알려주세요",
+      "prayer": "기도 제목이 무엇인가요?"
+    }
+  },
+  "verseMap": {
+    "title": "성경지도",
+    "searchPlaceholder": "예: 요한복음 3:16",
+    "explore": "탐색",
+    "back": "이전 구절",
+    "loading": "연결된 구절을 찾고 있습니다...",
+    "noData": "검색 결과가 없습니다",
+    "welcomeTitle": "성경 구절 관계 탐색",
+    "welcomeSubtitle": "구절을 입력하면 연결된 다른 구절들을 보여드립니다",
+    "popularVerses": "자주 찾는 구절",
+    "connectionTypes": "연결 유형",
+    "connections": "개의 연결된 구절",
+    "connectedVerses": "개 연결",
+    "exploreFromHere": "여기서 탐색",
+    "moreConnections": "개 더",
+    "subConnectionsTitle": "이 구절과 연결된 다른 구절들:",
+    "footerTip1": "카드를 클릭하면 더 많은 연결을 볼 수 있습니다",
+    "footerTip2": "\"여기서 탐색\" 버튼으로 해당 구절 중심으로 이동",
+    "relationTypes": {
+      "prophecy_fulfillment": "예언/성취",
+      "parallel": "평행본문",
+      "quotation": "인용",
+      "thematic": "주제 연결",
+      "narrative": "서사 연결",
+      "theological": "신학적",
+      "semantic": "의미 유사"
+    },
+    "relationDescriptions": {
+      "prophecy_fulfillment": "구약의 예언이 신약에서 이루어진 관계",
+      "parallel": "같은 사건이나 말씀이 다른 책에도 기록된 경우",
+      "quotation": "한 구절이 다른 구절을 직접 인용한 경우",
+      "thematic": "같은 주제나 가르침을 다루는 구절들",
+      "narrative": "같은 이야기나 사건을 다루는 구절들",
+      "theological": "신학적으로 연결된 개념을 다루는 구절들",
+      "semantic": "의미적으로 유사한 내용의 구절들"
+    }
+  }
+}

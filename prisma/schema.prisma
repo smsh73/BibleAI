@@ -1,0 +1,81 @@
+// Prisma schema for Bible Chatbot
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// API Keys 관리
+model ApiKey {
+  id        String   @id @default(cuid())
+  provider  String   // openai, anthropic, google, perplexity
+  key       String   // 암호화된 키
+  isActive  Boolean  @default(true)
+  priority  Int      @default(0) // fallback 순서
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider])
+  @@index([provider, isActive])
+}
+
+// 사용자 (간단한 인증)
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  role          String    @default("user") // user, admin
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  conversations Conversation[]
+}
+
+// 대화 세션
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?   // 대화 제목 (자동 생성 또는 사용자 지정)
+  emotion   String?   // 초기 감정 상태
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages  Message[]
+
+  @@index([userId, createdAt])
+}
+
+// 메시지
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // user, assistant
+  content        String       @db.Text
+  verseReferences Json?      // 사용된 성경 구절 참조
+  provider       String?      // 사용된 AI 제공자 (openai, claude, etc.)
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// API 사용 통계
+model ApiUsage {
+  id        String   @id @default(cuid())
+  provider  String   // openai, anthropic, google, perplexity
+  endpoint  String   // chat, embedding, search
+  tokens    Int?     // 사용 토큰 수
+  cost      Float?   // 비용 (USD)
+  success   Boolean  @default(true)
+  errorMsg  String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([provider, createdAt])
+  @@index([createdAt])
+}

@@ -1,0 +1,102 @@
+{
+  "common": {
+    "home": "Home",
+    "verseMap": "Verse Map",
+    "sermon": "Sermons",
+    "news": "News",
+    "bulletin": "Bulletin",
+    "admin": "Admin",
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "send": "Send",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "search": "Search",
+    "close": "Close"
+  },
+  "bible": {
+    "title": "AI Bible Counseling",
+    "greeting": "Peace be with you",
+    "greetingSubtitle": "Share what's on your heart",
+    "inputPlaceholder": "Share your thoughts...",
+    "versionLabel": "Bible:",
+    "suggestions": {
+      "hard": "I'm going through a hard time",
+      "grateful": "I want to give thanks",
+      "forgive": "I'm struggling to forgive",
+      "anxious": "I'm worried about the future"
+    },
+    "emotions": {
+      "depressed": "Depressed",
+      "anxious": "Anxious",
+      "angry": "Angry",
+      "grateful": "Grateful",
+      "joyful": "Joyful",
+      "lonely": "Lonely",
+      "fearful": "Fearful",
+      "hopeful": "Hopeful"
+    },
+    "relatedVerses": "Related Verses",
+    "sermonClips": "Related Sermons"
+  },
+  "news": {
+    "title": "Church News AI",
+    "greeting": "Ask about church news",
+    "inputPlaceholder": "Ask about church news...",
+    "yearLabel": "Year:",
+    "allYears": "All",
+    "suggestions": {
+      "recent": "What's the latest church news?",
+      "events": "Are there any upcoming events?",
+      "mission": "Tell me about mission activities"
+    },
+    "sources": "Sources"
+  },
+  "bulletin": {
+    "title": "Bulletin AI",
+    "greeting": "Ask about bulletin contents",
+    "inputPlaceholder": "Ask about the bulletin...",
+    "suggestions": {
+      "thisWeek": "What's the worship schedule this week?",
+      "announcements": "What are the announcements?",
+      "prayer": "What are the prayer requests?"
+    }
+  },
+  "verseMap": {
+    "title": "Verse Map",
+    "searchPlaceholder": "e.g., John 3:16",
+    "explore": "Explore",
+    "back": "Previous verse",
+    "loading": "Finding connected verses...",
+    "noData": "No results found",
+    "welcomeTitle": "Explore Bible Verse Connections",
+    "welcomeSubtitle": "Enter a verse to discover related passages",
+    "popularVerses": "Popular Verses",
+    "connectionTypes": "Connection Types",
+    "connections": "connected verses",
+    "connectedVerses": "connections",
+    "exploreFromHere": "Explore from here",
+    "moreConnections": "more",
+    "subConnectionsTitle": "Other verses connected to this passage:",
+    "footerTip1": "Click a card to see more connections",
+    "footerTip2": "Use \"Explore from here\" to navigate to that verse",
+    "relationTypes": {
+      "prophecy_fulfillment": "Prophecy/Fulfillment",
+      "parallel": "Parallel Passage",
+      "quotation": "Quotation",
+      "thematic": "Thematic Link",
+      "narrative": "Narrative Link",
+      "theological": "Theological",
+      "semantic": "Semantic Similarity"
+    },
+    "relationDescriptions": {
+      "prophecy_fulfillment": "Old Testament prophecy fulfilled in New Testament",
+      "parallel": "Same event or teaching recorded in different books",
+      "quotation": "One passage directly quotes another",
+      "thematic": "Passages sharing the same theme or teaching",
+      "narrative": "Passages covering the same story or event",
+      "theological": "Passages connected by theological concepts",
+      "semantic": "Passages with similar meaning or content"
+    }
+  }
+}

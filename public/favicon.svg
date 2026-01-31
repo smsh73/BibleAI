@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bookGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/>
+      <stop offset="100%" style="stop-color:#ea580c"/>
+    </linearGradient>
+  </defs>
+  <!-- Book cover -->
+  <rect x="4" y="4" width="24" height="24" rx="2" fill="url(#bookGradient)"/>
+  <!-- Book spine -->
+  <rect x="4" y="4" width="4" height="24" fill="#d97706"/>
+  <!-- Pages -->
+  <rect x="9" y="6" width="17" height="20" rx="1" fill="#fef3c7"/>
+  <!-- Cross on book -->
+  <rect x="16" y="10" width="2" height="12" fill="#b45309"/>
+  <rect x="12" y="14" width="10" height="2" fill="#b45309"/>
+</svg>
