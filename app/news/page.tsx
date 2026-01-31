@@ -88,10 +88,16 @@ export default function NewsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 상태 로드
+  // 상태 로드 (뉴스 작업 진행 중이면 주기적 갱신)
   useEffect(() => {
     loadStatus()
-  }, [])
+
+    // 뉴스 작업 진행 중이면 15초마다 상태 갱신
+    if (taskLock.locked && taskLock.taskType === 'news') {
+      const interval = setInterval(loadStatus, 15000)
+      return () => clearInterval(interval)
+    }
+  }, [taskLock.locked, taskLock.taskType])
 
   // Task lock 상태 확인
   useEffect(() => {
@@ -616,7 +622,7 @@ export default function NewsPage() {
         {/* =============== 크롤링 탭 =============== */}
         {activeTab === 'crawl' && (
           <div className="space-y-6">
-            {/* Task Lock 경고 배너 */}
+            {/* Task Lock 경고 배너 - 다른 작업 진행 중 */}
             {taskLock.locked && taskLock.taskType !== 'news' && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
                 <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -634,6 +640,28 @@ export default function NewsPage() {
                     {taskLock.taskType === 'bible' && '성경 임베딩'}
                     {taskLock.description && ` - ${taskLock.description}`}
                     {taskLock.elapsedMinutes !== undefined && ` (${taskLock.elapsedMinutes}분 경과)`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 뉴스 추출 진행 중 배너 */}
+            {taskLock.locked && taskLock.taskType === 'news' && (
+              <div className="bg-indigo-50 border border-indigo-300 rounded-xl p-4 flex items-center gap-3">
+                <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-indigo-800">
+                    뉴스 추출 작업이 백그라운드에서 진행 중입니다
+                  </p>
+                  <p className="text-sm text-indigo-700">
+                    {taskLock.description && `${taskLock.description}`}
+                    {taskLock.elapsedMinutes !== undefined && ` • ${taskLock.elapsedMinutes}분 경과`}
+                    {crawlStatus && ` • 현재 ${crawlStatus.completedIssues}개 호수, ${crawlStatus.totalChunks.toLocaleString()}개 청크 완료`}
+                  </p>
+                  <p className="text-xs text-indigo-600 mt-1">
+                    브라우저를 닫아도 작업은 계속됩니다. 완료될 때까지 기다려 주세요.
                   </p>
                 </div>
               </div>
@@ -827,17 +855,25 @@ export default function NewsPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleProcessIncremental(3)}
-                          disabled={taskLock.locked && taskLock.taskType !== 'news'}
+                          disabled={taskLock.locked}
                           className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {taskLock.locked && taskLock.taskType !== 'news' ? '다른 작업 진행 중' : '3개 처리'}
+                          {taskLock.locked && taskLock.taskType === 'news'
+                            ? '뉴스 추출 진행 중'
+                            : taskLock.locked
+                              ? '다른 작업 진행 중'
+                              : '3개 처리'}
                         </button>
                         <button
                           onClick={() => handleProcessIncremental(scannedIssues.filter(i => i.status !== 'completed').length)}
-                          disabled={taskLock.locked && taskLock.taskType !== 'news'}
+                          disabled={taskLock.locked}
                           className="px-4 py-2 bg-indigo-800 text-white rounded-lg hover:bg-indigo-900 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {taskLock.locked && taskLock.taskType !== 'news' ? '다른 작업 진행 중' : `전체 처리 (${scannedIssues.filter(i => i.status !== 'completed').length}개)`}
+                          {taskLock.locked && taskLock.taskType === 'news'
+                            ? '뉴스 추출 진행 중'
+                            : taskLock.locked
+                              ? '다른 작업 진행 중'
+                              : `전체 처리 (${scannedIssues.filter(i => i.status !== 'completed').length}개)`}
                         </button>
                       </div>
                     </div>
