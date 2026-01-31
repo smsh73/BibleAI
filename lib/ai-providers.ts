@@ -395,9 +395,14 @@ function createSystemPrompt(context: ConversationContext): string {
       'tired': '지침'
     }
     const keywords = EMOTION_KEYWORDS[emotion] || []
-    prompt += `**성도의 현재 감정:** ${emotionName[emotion] || emotion}
-**관련 주제어:** ${keywords.join(', ')}
-→ 이 감정에 공감하며 위로의 말씀을 전해주세요.
+    prompt += `성도가 선택한 감정: ${emotionName[emotion] || emotion}
+관련 주제어: ${keywords.join(', ')}
+
+⚠️ 중요: 실제 메시지 내용 우선!
+- 성도가 선택한 감정과 실제 메시지 내용이 다를 수 있습니다.
+- 예: "감사"를 선택했지만 실제로는 힘든 상황을 토로하는 경우
+- 이런 경우, 반드시 실제 메시지 내용에 맞춰 응답하세요.
+- 선택한 감정은 참고만 하고, 메시지에서 드러나는 진짜 감정에 공감하세요.
 
 `
   }
