@@ -86,6 +86,7 @@ export interface ConversationContext {
   christianWisdom?: string | null   // 기독교 철학자/신학자의 지혜 (Perplexity 검색)
   verseRelations?: VerseRelation[]  // 성경 구절 간 관계 (GraphRAG)
   verseRelationsText?: string       // 성경 구절 관계 설명 텍스트
+  simpleMode?: boolean              // 간단 응답 모드 (인사, 짧은 메시지)
 }
 
 export interface EmbeddingModel {

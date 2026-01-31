@@ -135,6 +135,31 @@ function parseBibleReferences(text: string): React.ReactNode[] {
   return parts.length > 0 ? parts : [text]
 }
 
+// 간단한 인사/짧은 메시지 감지 함수
+function isSimpleMessage(text: string): boolean {
+  const trimmed = text.trim()
+
+  // 5자 이하인 경우
+  if (trimmed.length <= 5) return true
+
+  // 기호만 있는 경우
+  if (/^[.,!?;:~@#$%^&*()_+\-=\[\]{}|\\'"<>/\s]+$/.test(trimmed)) return true
+
+  // 인사말 패턴
+  const greetingPatterns = [
+    /^(안녕|하이|헬로|hello|hi|hey|반가워|반갑|좋은\s*(아침|저녁|하루)|굿모닝|굿나잇)/i,
+    /^(감사합니다|고마워|고맙습니다|ㄱㅅ|ㅎㅇ|ㅂㅇ)/i,
+    /^(네|예|응|ㅇㅇ|ㅇㅋ|ok|okay|yes|no|아니|아니요)/i,
+    /^(안녕하세요|안녕하십니까|처음 뵙겠습니다)/i
+  ]
+
+  for (const pattern of greetingPatterns) {
+    if (pattern.test(trimmed)) return true
+  }
+
+  return false
+}
+
 // 뉴스 상세 팝업 컴포넌트 - 통일된 스타일
 function NewsDetailPopup({
   news,
@@ -383,6 +408,9 @@ export default function Home() {
       createdAt: new Date()
     }
 
+    // 간단한 인사/짧은 메시지 체크
+    const isSimple = isSimpleMessage(input.trim())
+
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setLoading(true)
@@ -395,7 +423,8 @@ export default function Home() {
         body: JSON.stringify({
           messages: [...messages, userMessage],
           emotion,
-          version: selectedVersion  // 선택된 성경 버전 전달
+          version: selectedVersion,  // 선택된 성경 버전 전달
+          simpleMode: isSimple  // 간단 응답 모드 플래그
         })
       })
 
@@ -453,8 +482,8 @@ export default function Home() {
           }
         }
       }
-      // 응답 완료 후 미디어 자동 생성
-      if (assistantMessage) {
+      // 응답 완료 후 미디어 자동 생성 (간단한 메시지가 아닌 경우만)
+      if (assistantMessage && !isSimple) {
         generateMedia(userMessage.content, assistantMessage, verseReferences)
       }
     } catch (error) {
@@ -1082,14 +1111,30 @@ export default function Home() {
             {/* 입력 영역 */}
             <div className="flex-shrink-0 px-4 py-3 bg-white/50">
               <form onSubmit={handleBibleSubmit} className="max-w-4xl mx-auto">
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
+                <div className="flex gap-2 items-end">
+                  <textarea
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Enter만 누르면 제출, Shift+Enter는 줄바꿈
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        if (input.trim() && !loading) {
+                          handleBibleSubmit(e)
+                        }
+                      }
+                    }}
                     placeholder={t('bible.inputPlaceholder')}
-                    className="flex-1 px-4 py-3 bg-white border border-amber-300 rounded-full focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-gray-900 placeholder-amber-500 text-base"
+                    className="flex-1 px-4 py-3 bg-white border border-amber-300 rounded-2xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-gray-900 placeholder-amber-500 text-base resize-none min-h-[48px] max-h-[120px]"
                     disabled={loading}
+                    rows={1}
+                    style={{ height: 'auto', overflow: 'hidden' }}
+                    ref={(el) => {
+                      if (el) {
+                        el.style.height = 'auto'
+                        el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+                      }
+                    }}
                   />
                   <button
                     type="submit"

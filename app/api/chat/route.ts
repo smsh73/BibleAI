@@ -19,12 +19,13 @@ interface ChatRequest {
   messages: ChatMessage[]
   emotion?: EmotionType
   version?: string  // 성경 버전 (GAE, KRV, NIV 등)
+  simpleMode?: boolean  // 간단 응답 모드 (인사, 짧은 메시지)
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: ChatRequest = await req.json()
-    const { messages, emotion, version } = body  // version 추가
+    const { messages, emotion, version, simpleMode } = body
 
     if (!messages || messages.length === 0) {
       return NextResponse.json(
@@ -43,67 +44,75 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 1. 관련 성경 구절 검색 (버전 필터링 포함)
-    const relevantVerses = await searchBibleVerses(
-      lastUserMessage.content,
-      { emotion, limit: 5, version }  // version 전달
-    )
-
-    // 2. 설교 내용 검색 (YouTube 설교에서 추출한 벡터)
+    // 간단 응답 모드인 경우 검색 건너뛰기
+    let relevantVerses: any[] = []
     let sermonContent: string | null = null
-    let sermonResults: Array<{
-      video_id: string
-      video_title: string
-      video_url?: string
-      content: string
-      start_time?: number
-      end_time?: number
-      combined_score?: number
-    }> = []
-    try {
-      sermonResults = await hybridSearchSermons(lastUserMessage.content, { limit: 3 })
-      if (sermonResults && sermonResults.length > 0) {
-        sermonContent = sermonResults
-          .map((s, i) => {
-            const timeInfo = s.start_time
-              ? ` (${formatTime(s.start_time)} ~ ${formatTime(s.end_time || s.start_time)})`
-              : ''
-            return `[설교 ${i + 1}] ${s.video_title}${timeInfo}:\n"${s.content.substring(0, 300)}..."`
-          })
-          .join('\n\n')
-        console.log('[Chat API] 설교 내용 발견:', sermonResults.length, '개')
-      }
-    } catch (e) {
-      console.warn('[Chat API] 설교 검색 실패:', e)
-    }
-
-    // 3. 설교 내용이 없으면 기독교 지혜 검색 (Perplexity 폴백)
     let christianWisdom: string | null = null
-    if (!sermonContent) {
+    let verseRelations: { relations: any[]; explanationText: string } = { relations: [], explanationText: '' }
+
+    if (simpleMode) {
+      // 간단 응답 모드: 검색 건너뛰고 바로 짧은 응답 생성
+      console.log('[Chat API] 간단 응답 모드 - 검색 건너뜀')
+    } else {
+      // 1. 관련 성경 구절 검색 (버전 필터링 포함)
+      relevantVerses = await searchBibleVerses(
+        lastUserMessage.content,
+        { emotion, limit: 5, version }  // version 전달
+      )
+
+      // 2. 설교 내용 검색 (YouTube 설교에서 추출한 벡터)
+      let sermonResults: Array<{
+        video_id: string
+        video_title: string
+        video_url?: string
+        content: string
+        start_time?: number
+        end_time?: number
+        combined_score?: number
+      }> = []
       try {
-        // 사용자 메시지에서 주제 추출
-        const topic = extractTopic(lastUserMessage.content)
-        christianWisdom = await searchChristianWisdom(topic)
-        if (christianWisdom) {
-          console.log('[Chat API] 기독교 지혜 검색 성공')
+        sermonResults = await hybridSearchSermons(lastUserMessage.content, { limit: 3 })
+        if (sermonResults && sermonResults.length > 0) {
+          sermonContent = sermonResults
+            .map((s, i) => {
+              const timeInfo = s.start_time
+                ? ` (${formatTime(s.start_time)} ~ ${formatTime(s.end_time || s.start_time)})`
+                : ''
+              return `[설교 ${i + 1}] ${s.video_title}${timeInfo}:\n"${s.content.substring(0, 300)}..."`
+            })
+            .join('\n\n')
+          console.log('[Chat API] 설교 내용 발견:', sermonResults.length, '개')
         }
       } catch (e) {
-        console.warn('[Chat API] 기독교 지혜 검색 실패:', e)
+        console.warn('[Chat API] 설교 검색 실패:', e)
       }
-    }
 
-    // 4. 성경 구절 간 관계 조회
-    let verseRelations: { relations: any[]; explanationText: string } = { relations: [], explanationText: '' }
-    try {
-      const verseRefs = relevantVerses.map(r => r.chunk.referenceFull)
-      if (verseRefs.length > 1) {
-        verseRelations = await getVersesRelationsForChat(verseRefs)
-        if (verseRelations.relations.length > 0) {
-          console.log('[Chat API] 구절 관계 발견:', verseRelations.relations.length, '개')
+      // 3. 설교 내용이 없으면 기독교 지혜 검색 (Perplexity 폴백)
+      if (!sermonContent) {
+        try {
+          // 사용자 메시지에서 주제 추출
+          const topic = extractTopic(lastUserMessage.content)
+          christianWisdom = await searchChristianWisdom(topic)
+          if (christianWisdom) {
+            console.log('[Chat API] 기독교 지혜 검색 성공')
+          }
+        } catch (e) {
+          console.warn('[Chat API] 기독교 지혜 검색 실패:', e)
         }
       }
-    } catch (e) {
-      console.warn('[Chat API] 구절 관계 조회 실패:', e)
+
+      // 4. 성경 구절 간 관계 조회
+      try {
+        const verseRefs = relevantVerses.map((r: any) => r.chunk.referenceFull)
+        if (verseRefs.length > 1) {
+          verseRelations = await getVersesRelationsForChat(verseRefs)
+          if (verseRelations.relations.length > 0) {
+            console.log('[Chat API] 구절 관계 발견:', verseRelations.relations.length, '개')
+          }
+        }
+      } catch (e) {
+        console.warn('[Chat API] 구절 관계 조회 실패:', e)
+      }
     }
 
     // 5. 컨텍스트 구성
@@ -114,7 +123,8 @@ export async function POST(req: NextRequest) {
       sermonContent,
       christianWisdom,
       verseRelations: verseRelations.relations,
-      verseRelationsText: verseRelations.explanationText
+      verseRelationsText: verseRelations.explanationText,
+      simpleMode  // 간단 응답 모드 플래그 전달
     }
 
     // 6. 스트리밍 응답 생성
