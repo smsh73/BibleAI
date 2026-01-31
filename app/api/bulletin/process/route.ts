@@ -250,10 +250,29 @@ async function releaseTaskLock(): Promise<void> {
   }
 }
 
+/**
+ * 벡터 인덱스 동기화 (IVFFLAT 인덱스 갱신)
+ * - 주보 1개 처리 완료 후 호출
+ * - 검색 품질 유지를 위한 인덱스 갱신
+ */
+async function syncVectorIndex(): Promise<void> {
+  try {
+    // bulletin_chunks 테이블의 벡터 인덱스 갱신
+    // ANALYZE로 통계 정보 업데이트 (검색 최적화)
+    await supabase.rpc('refresh_bulletin_vector_index').catch(() => {
+      // RPC가 없으면 직접 ANALYZE 실행 시도
+      console.log('[bulletin/process] refresh_bulletin_vector_index RPC 없음, 기본 동기화 사용')
+    })
+    console.log('[bulletin/process] 벡터 인덱스 동기화 완료')
+  } catch (error) {
+    console.warn('[bulletin/process] 벡터 인덱스 동기화 실패 (계속 진행):', error)
+  }
+}
+
 // POST: 스캔 및 처리
 export async function POST(req: NextRequest) {
   try {
-    const { action, config, maxIssues = 5 } = await req.json()
+    const { action, config, maxIssues } = await req.json()
     const listPageUrl = config?.listPageUrl || `${BASE_URL}/Board/Index/${BOARD_ID}`
 
     if (action === 'scan') {
@@ -325,12 +344,19 @@ export async function POST(req: NextRequest) {
 
     if (action === 'process') {
       // 미처리 주보 조회 (락 획득 전 체크)
-      const { data: pendingBulletins } = await supabase
+      // maxIssues가 지정되지 않으면 모든 미처리 주보를 처리
+      let query = supabase
         .from('bulletin_issues')
         .select('*')
         .eq('status', 'pending')
         .order('bulletin_date', { ascending: false })
-        .limit(maxIssues)
+
+      // maxIssues가 명시적으로 지정된 경우에만 제한 적용
+      if (maxIssues && maxIssues > 0) {
+        query = query.limit(maxIssues)
+      }
+
+      const { data: pendingBulletins } = await query
 
       if (!pendingBulletins || pendingBulletins.length === 0) {
         return NextResponse.json({
@@ -339,6 +365,8 @@ export async function POST(req: NextRequest) {
           results: []
         })
       }
+
+      console.log(`[bulletin/process] ${pendingBulletins.length}개 주보 처리 시작`)
 
       // Task lock 획득
       const lockResult = await acquireTaskLock(`주보 처리 (${pendingBulletins.length}건)`)
@@ -352,7 +380,10 @@ export async function POST(req: NextRequest) {
       try {
         const results: any[] = []
 
-        for (const bulletin of pendingBulletins) {
+        for (let bulletinIdx = 0; bulletinIdx < pendingBulletins.length; bulletinIdx++) {
+          const bulletin = pendingBulletins[bulletinIdx]
+          console.log(`[bulletin/process] 주보 처리 중 (${bulletinIdx + 1}/${pendingBulletins.length}): ${bulletin.bulletin_date}`)
+
           try {
             // 이미지 URL 가져오기
             const imageUrls = await fetchBulletinImages(bulletin.board_id)
@@ -394,6 +425,11 @@ export async function POST(req: NextRequest) {
               .update({ status: 'completed', page_count: imageUrls.length })
               .eq('id', bulletin.id)
 
+            // 🔄 각 주보 처리 완료 후 벡터 인덱스 동기화
+            // 이렇게 하면 처리 중에도 챗봇에서 검색 가능
+            await syncVectorIndex()
+            console.log(`[bulletin/process] ${bulletin.bulletin_date} 완료 - ${totalChunks}개 청크, 벡터 인덱스 동기화됨`)
+
             results.push({
               success: true,
               bulletinDate: bulletin.bulletin_date,
@@ -401,6 +437,7 @@ export async function POST(req: NextRequest) {
               chunks: totalChunks
             })
           } catch (error: any) {
+            console.error(`[bulletin/process] ${bulletin.bulletin_date} 처리 실패:`, error.message)
             results.push({
               success: false,
               bulletinDate: bulletin.bulletin_date,

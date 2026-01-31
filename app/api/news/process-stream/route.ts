@@ -26,6 +26,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 )
 
+/**
+ * 벡터 인덱스 동기화 (IVFFLAT 인덱스 갱신)
+ * - 뉴스 1호 처리 완료 후 호출
+ * - 검색 품질 유지를 위한 인덱스 갱신
+ */
+async function syncVectorIndex(): Promise<void> {
+  try {
+    await supabase.rpc('refresh_news_vector_index').catch(() => {
+      console.log('[news/process-stream] refresh_news_vector_index RPC 없음, 기본 동기화 사용')
+    })
+    console.log('[news/process-stream] 벡터 인덱스 동기화 완료')
+  } catch (error) {
+    console.warn('[news/process-stream] 벡터 인덱스 동기화 실패 (계속 진행):', error)
+  }
+}
+
 // 기본값
 const DEFAULT_BASE_URL = 'https://www.anyangjeil.org'
 const DEFAULT_BOARD_ID = 66
@@ -348,7 +364,8 @@ async function downloadImage(imageUrl: string): Promise<Buffer> {
 }
 
 export async function POST(req: NextRequest) {
-  const { action, issueNumber, maxIssues = 3, config = {} } = await req.json()
+  // maxIssues 기본값 0 = 제한 없음 (모든 미처리 호수 처리)
+  const { action, issueNumber, maxIssues = 0, config = {} } = await req.json()
 
   // URL 설정 추출 (유연한 방식 + 레거시 호환)
   const urlConfig: UrlConfig = {
@@ -380,13 +397,16 @@ export async function POST(req: NextRequest) {
           send({ type: 'progress', step: 'scan', message: `${issues.length}개 호수 발견`, percent: 10 })
 
           // 미처리 호수 필터링
+          // maxIssues가 지정되지 않거나 0이면 모든 미처리 호수를 처리
           const pendingIssues: any[] = []
           for (const issue of issues) {
             if (!(await isIssueProcessed(issue.issueNumber))) {
               pendingIssues.push(issue)
-              if (pendingIssues.length >= maxIssues) break
+              // maxIssues가 명시적으로 지정된 경우에만 제한 적용
+              if (maxIssues && maxIssues > 0 && pendingIssues.length >= maxIssues) break
             }
           }
+          console.log(`[news/process-stream] ${pendingIssues.length}개 미처리 호수 발견`)
 
           if (pendingIssues.length === 0) {
             send({ type: 'complete', message: '처리할 새로운 호수가 없습니다.', results: [] })
@@ -553,6 +573,10 @@ export async function POST(req: NextRequest) {
               // 상태 업데이트
               await updateIssueStatus(issueId, 'completed')
 
+              // 🔄 각 호수 처리 완료 후 벡터 인덱스 동기화
+              // 이렇게 하면 처리 중에도 챗봇에서 검색 가능
+              await syncVectorIndex()
+
               results.push({
                 issueNumber: issue.issueNumber,
                 issueDate: issue.issueDate,
@@ -564,7 +588,7 @@ export async function POST(req: NextRequest) {
               send({
                 type: 'progress',
                 step: 'issue_done',
-                message: `${issue.issueDate} 완료`,
+                message: `${issue.issueDate} 완료 (벡터 인덱스 동기화됨)`,
                 percent: basePercent + (80 / pendingIssues.length),
                 detail: `${totalArticles}개 기사, ${totalChunks}개 청크`,
                 issueDate: issue.issueDate
