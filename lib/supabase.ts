@@ -880,6 +880,110 @@ export async function uploadSermonChunks(
   return { success, failed }
 }
 
+/**
+ * 설교 청크 업로드 (재시도 로직 포함)
+ * Rate limit 및 일시적 오류에 대해 지수 백오프로 재시도
+ */
+export async function uploadSermonChunksWithRetry(
+  videoId: string,
+  videoTitle: string,
+  chunks: Array<{ text: string; startTime: number; endTime: number }>,
+  onProgress?: (current: number, total: number) => void,
+  videoUrl?: string,
+  maxRetries: number = 3
+): Promise<{ success: number; failed: number }> {
+  const client = getSupabaseAdmin()
+  if (!client) throw new Error('Supabase admin client not available')
+
+  let success = 0
+  let failed = 0
+  const BATCH_SIZE = 5  // 한 번에 처리할 청크 수
+  const BASE_DELAY = 500  // 기본 대기 시간 (ms)
+
+  // 배치 단위로 처리
+  for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + BATCH_SIZE, chunks.length)
+    const batch = chunks.slice(batchStart, batchEnd)
+
+    for (let i = 0; i < batch.length; i++) {
+      const chunkIndex = batchStart + i
+      const chunk = batch[i]
+      let retryCount = 0
+      let chunkSuccess = false
+
+      while (retryCount < maxRetries && !chunkSuccess) {
+        try {
+          // 재시도 시 지수 백오프 대기
+          if (retryCount > 0) {
+            const delay = BASE_DELAY * Math.pow(2, retryCount)
+            console.log(`[SermonChunks] 청크 ${chunkIndex} 재시도 ${retryCount}/${maxRetries}, ${delay}ms 대기`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+          }
+
+          // 임베딩 생성
+          const embedding = await generateEmbedding(chunk.text)
+
+          // Supabase에 저장
+          const insertData: Record<string, any> = {
+            video_id: videoId,
+            video_title: videoTitle,
+            chunk_index: chunkIndex,
+            content: chunk.text,
+            start_time: chunk.startTime,
+            end_time: chunk.endTime,
+            embedding
+          }
+
+          if (videoUrl) {
+            insertData.video_url = videoUrl
+          }
+
+          const { error } = await client
+            .from('sermon_chunks')
+            .insert(insertData)
+
+          if (error) {
+            // 중복 키 에러는 성공으로 처리
+            if (error.code === '23505') {
+              console.log(`[SermonChunks] 청크 ${chunkIndex} 이미 존재 (스킵)`)
+              chunkSuccess = true
+              success++
+            } else {
+              throw error
+            }
+          } else {
+            chunkSuccess = true
+            success++
+          }
+        } catch (error: any) {
+          retryCount++
+          const isRateLimit = error.message?.includes('rate') ||
+                             error.message?.includes('429') ||
+                             error.message?.includes('Too Many')
+
+          if (isRateLimit && retryCount < maxRetries) {
+            // Rate limit 시 더 긴 대기
+            console.warn(`[SermonChunks] Rate limit 감지, 청크 ${chunkIndex}`)
+            await new Promise(resolve => setTimeout(resolve, 5000 * retryCount))
+          } else if (retryCount >= maxRetries) {
+            console.error(`[SermonChunks] 청크 ${chunkIndex} 최종 실패:`, error.message)
+            failed++
+          }
+        }
+      }
+
+      onProgress?.(chunkIndex + 1, chunks.length)
+    }
+
+    // 배치 간 대기 (Rate limit 방지)
+    if (batchEnd < chunks.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+  }
+
+  return { success, failed }
+}
+
 // ============================================
 // 설교 검색 함수
 // ============================================
@@ -2254,4 +2358,105 @@ export async function getDefaultBibleVersion(): Promise<string> {
   const versions = await getBibleVersions()
   const defaultVersion = versions.find(v => v.is_default)
   return defaultVersion?.id || 'GAE'
+}
+
+// ============================================
+// 뉴스 검색
+// ============================================
+
+export interface NewsSearchResult {
+  id: string
+  issue_number: number
+  issue_date: string
+  article_type: string
+  title: string
+  content: string
+  similarity: number
+}
+
+/**
+ * 뉴스 기사 Hybrid 검색
+ */
+export async function hybridSearchNews(
+  query: string,
+  options: { limit?: number; year?: number } = {}
+): Promise<NewsSearchResult[]> {
+  const { limit = 5, year } = options
+
+  const client = getSupabaseAdmin() || getSupabase()
+  if (!client) return []
+
+  try {
+    const queryEmbedding = await generateEmbedding(query)
+
+    const { data, error } = await client.rpc('hybrid_search_news', {
+      query_embedding: queryEmbedding,
+      query_text: query,
+      match_threshold: 0.4,
+      match_count: limit,
+      year_filter: year || null,
+      article_type_filter: null
+    })
+
+    if (error) {
+      console.error('[supabase] News search error:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('[supabase] News search error:', error)
+    return []
+  }
+}
+
+// ============================================
+// 주보 검색
+// ============================================
+
+export interface BulletinSearchResult {
+  id: string
+  bulletin_date: string
+  bulletin_title: string
+  page_number: number
+  section_type: string
+  title: string
+  content: string
+  similarity: number
+}
+
+/**
+ * 주보 Hybrid 검색
+ */
+export async function hybridSearchBulletin(
+  query: string,
+  options: { limit?: number; year?: number; sectionType?: string } = {}
+): Promise<BulletinSearchResult[]> {
+  const { limit = 5, year, sectionType } = options
+
+  const client = getSupabaseAdmin() || getSupabase()
+  if (!client) return []
+
+  try {
+    const queryEmbedding = await generateEmbedding(query)
+
+    const { data, error } = await client.rpc('hybrid_search_bulletin', {
+      query_embedding: queryEmbedding,
+      query_text: query,
+      match_threshold: 0.4,
+      match_count: limit,
+      year_filter: year || null,
+      section_type_filter: sectionType || null
+    })
+
+    if (error) {
+      console.error('[supabase] Bulletin search error:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('[supabase] Bulletin search error:', error)
+    return []
+  }
 }

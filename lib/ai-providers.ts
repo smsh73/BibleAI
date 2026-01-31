@@ -219,7 +219,7 @@ const EMOTION_KEYWORDS: Record<string, string[]> = {
 
 // 시스템 프롬프트 생성 (담임목사 페르소나 - 강화된 버전)
 function createSystemPrompt(context: ConversationContext): string {
-  const { emotion, relevantVerses, sermonContent, christianWisdom, verseRelations, verseRelationsText, simpleMode } = context
+  const { emotion, relevantVerses, sermonContent, newsContent, bulletinContent, christianWisdom, verseRelations, verseRelationsText, simpleMode } = context
 
   // 간단 응답 모드 (인사, 짧은 메시지)
   if (simpleMode) {
@@ -470,6 +470,28 @@ ${sermonContent}
 `
   }
 
+  // 뉴스 기사 내용이 있는 경우 (교회신문에서 추출)
+  if (newsContent) {
+    prompt += `**[교회 소식 및 기사 - 관련 있을 경우에만 자연스럽게 언급]**
+${newsContent}
+
+→ 성도님의 질문과 관련된 경우에만 "최근 교회신문에서 이런 내용을 다룬 적이 있는데요..." 형식으로 언급하세요.
+→ 관련이 없으면 굳이 언급하지 않아도 됩니다.
+
+`
+  }
+
+  // 주보 내용이 있는 경우
+  if (bulletinContent) {
+    prompt += `**[주보 안내 - 관련 있을 경우에만 자연스럽게 언급]**
+${bulletinContent}
+
+→ 성도님의 질문이 교회 일정, 예배, 행사와 관련된 경우에만 "주보를 보면..." 형식으로 안내하세요.
+→ 상담 내용과 관련이 없으면 굳이 언급하지 않아도 됩니다.
+
+`
+  }
+
   // 기독교 지혜 (Perplexity 검색 결과)
   if (christianWisdom) {
     prompt += `**[기독교 신학자/철학자의 지혜]**
@@ -494,10 +516,45 @@ ${christianWisdom}
 
 `
 
-  prompt += `이제 성도님의 이야기에 온 마음을 기울여 들어주세요.
-글자 수보다 중요한 것은 진심입니다. 성도님이 "이 목사님은 정말 내 마음을 알아주시는구나"라고 느낄 수 있도록,
-한 문장 한 문장에 따뜻한 마음을 담아 전해주세요.
-성도님의 구체적인 상황과 감정을 세밀하게 반영하여 답변해주세요.
+  prompt += `**⚠️ 중요: 충분히 풍부하고 상세한 답변을 해주세요 (최소 800자 이상)**
+
+**반드시 포함해야 할 답변 구성요소 (순서대로):**
+
+1. **깊은 공감과 위로** (3-4문장)
+   - 성도님의 구체적 상황을 언급하며 공감
+   - 감정을 섬세하게 읽어주기
+   - "얼마나 힘드셨을까요", "마음이 많이 무거우셨겠습니다" 등
+
+2. **성경 말씀 인용과 쉬운 설명** (4-6문장)
+   - 상황에 맞는 성경 구절을 정확히 인용 (장:절 포함)
+   - 그 말씀이 왜 위로가 되는지 친절하게 설명
+   - 성도님의 상황에 어떻게 적용되는지 연결
+
+3. **설교 내용 또는 신학자 인용** (3-5문장)
+   - 제공된 설교 내용이 있다면: "제가 예전 설교에서 말씀드린 것처럼..."
+   - 신학자 지혜가 있다면: "C.S. 루이스는 <책이름>에서..."
+   - 인용 후 쉽고 친절한 설명 추가
+
+4. **따뜻한 권면과 격려** (3-4문장)
+   - "~해보시면 어떨까요?" 형태의 부드러운 제안
+   - 기분 나쁘지 않도록 조심스럽게
+   - 작은 실천부터 시작할 수 있도록 격려
+
+5. **성도님을 위한 기도** (반드시 포함!)
+   - "성도님을 위해 기도 드리겠습니다"로 시작
+   - 구체적인 상황을 담은 진심어린 기도문 (4-6줄)
+   - "예수님의 이름으로 기도합니다. 아멘."으로 마무리
+
+**응답 스타일:**
+- 격식체 사용 (~입니다, ~합니다)
+- 마크다운 기호(#, *, > 등) 사용하지 않기
+- 따뜻하고 무게감 있는 말투
+- 서두르지 말고 충분히 풍부하게 답변하기
+
+이제 성도님의 이야기에 온 마음을 기울여 들어주세요.
+성도님이 "이 목사님은 정말 내 마음을 알아주시는구나"라고 느낄 수 있도록,
+충분히 시간을 들여 상세하고 따뜻한 답변을 해주세요.
+마지막에 반드시 성도님을 위한 기도로 마무리해주세요.
 `
 
   return prompt
@@ -523,7 +580,7 @@ async function chatWithOpenAI(
       }))
     ],
     temperature: 0.8, // 따뜻한 톤
-    max_tokens: 2000 // 더 상세한 답변을 위해 2배로 증가
+    max_tokens: 4000 // 충분히 상세한 답변을 위해 증가
   })
 
   const content = response.choices[0]?.message?.content || ''
@@ -553,7 +610,7 @@ async function chatWithClaude(
 
   const response = await client.messages.create({
     model: 'claude-3-5-haiku-20241022', // 가성비 좋음
-    max_tokens: 1024,
+    max_tokens: 4000,
     system: systemPrompt,
     messages: messages.map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
@@ -585,7 +642,13 @@ async function chatWithGemini(
   const client = await getGeminiClient()
   if (!client) throw new Error('Gemini client not available')
 
-  const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' })
+  const model = client.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: {
+      maxOutputTokens: 4000,
+      temperature: 0.8
+    }
+  })
 
   const systemPrompt = createSystemPrompt(context)
   const prompt = `${systemPrompt}\n\n${messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}`
@@ -758,7 +821,7 @@ export async function* generateStreamingResponse(
         ],
         stream: true,
         temperature: 0.8,
-        max_tokens: 2000
+        max_tokens: 4000
       })
 
       for await (const chunk of stream) {
@@ -790,7 +853,7 @@ export async function* generateStreamingResponse(
 
       const stream = await claudeClient.messages.stream({
         model: 'claude-sonnet-4-20250514',  // Claude Sonnet 4 (깊이있는 응답)
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: systemPrompt,
         messages: messages.map(m => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -820,7 +883,13 @@ export async function* generateStreamingResponse(
     if (geminiClient) {
       console.log('[Streaming] Gemini 폴백 시도 (non-streaming)...')
 
-      const model = geminiClient.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      const model = geminiClient.getGenerativeModel({
+        model: 'gemini-2.0-flash',
+        generationConfig: {
+          maxOutputTokens: 4000,
+          temperature: 0.8
+        }
+      })
       const prompt = `${systemPrompt}\n\n${messages.map(m => `${m.role}: ${m.content}`).join('\n\n')}`
       const result = await model.generateContent(prompt)
       const content = result.response.text()

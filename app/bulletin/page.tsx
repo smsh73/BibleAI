@@ -62,6 +62,14 @@ export default function BulletinPage() {
   const [completedBulletins, setCompletedBulletins] = useState<BulletinIssue[]>([])
   const [issuesLoading, setIssuesLoading] = useState(false)
 
+  // Task lock 상태
+  const [taskLock, setTaskLock] = useState<{
+    locked: boolean
+    taskType?: string
+    description?: string
+    elapsedMinutes?: number
+  }>({ locked: false })
+
   // 자동 스크롤
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -70,6 +78,22 @@ export default function BulletinPage() {
   // 상태 로드
   useEffect(() => {
     loadStatus()
+  }, [])
+
+  // Task lock 상태 확인
+  useEffect(() => {
+    async function checkTaskLock() {
+      try {
+        const res = await fetch('/api/admin/task-lock')
+        const data = await res.json()
+        setTaskLock(data)
+      } catch (err) {
+        console.warn('Task lock 확인 실패:', err)
+      }
+    }
+    checkTaskLock()
+    const interval = setInterval(checkTaskLock, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   // 통계 탭 선택 시 완료된 주보 목록 로드
@@ -462,6 +486,29 @@ export default function BulletinPage() {
         {/* =============== 크롤링 탭 =============== */}
         {activeTab === 'crawl' && (
           <div className="space-y-6">
+            {/* Task Lock 경고 배너 */}
+            {taskLock.locked && taskLock.taskType !== 'bulletin' && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
+                <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-yellow-800">
+                    다른 작업이 진행 중입니다
+                  </p>
+                  <p className="text-sm text-yellow-700">
+                    {taskLock.taskType === 'sermon' && '설교 추출'}
+                    {taskLock.taskType === 'news' && '뉴스 기사 추출'}
+                    {taskLock.taskType === 'bible' && '성경 임베딩'}
+                    {taskLock.description && ` - ${taskLock.description}`}
+                    {taskLock.elapsedMinutes !== undefined && ` (${taskLock.elapsedMinutes}분 경과)`}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* 현재 상태 */}
             <div className="bg-white/95 rounded-xl border border-amber-100 shadow-sm p-6">
               <h2 className="text-lg font-semibold text-green-900 mb-4">처리 현황</h2>
@@ -548,15 +595,17 @@ export default function BulletinPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleProcess(3)}
-                          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm shadow-sm transition-colors"
+                          disabled={taskLock.locked && taskLock.taskType !== 'bulletin'}
+                          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          3개 처리
+                          {taskLock.locked && taskLock.taskType !== 'bulletin' ? '다른 작업 진행 중' : '3개 처리'}
                         </button>
                         <button
                           onClick={() => handleProcess(10)}
-                          className="px-4 py-2 bg-green-800 text-white rounded-lg hover:bg-green-900 text-sm shadow-sm transition-colors"
+                          disabled={taskLock.locked && taskLock.taskType !== 'bulletin'}
+                          className="px-4 py-2 bg-green-800 text-white rounded-lg hover:bg-green-900 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          10개 처리
+                          {taskLock.locked && taskLock.taskType !== 'bulletin' ? '다른 작업 진행 중' : '10개 처리'}
                         </button>
                       </div>
                     </div>

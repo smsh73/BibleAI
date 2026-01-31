@@ -83,6 +83,8 @@ export interface ConversationContext {
   previousMessages: ChatMessage[]
   relevantVerses: SearchResult[]
   sermonContent?: string | null     // YouTube 설교에서 추출한 관련 내용
+  newsContent?: string | null       // 교회신문 기사에서 추출한 관련 내용
+  bulletinContent?: string | null   // 주보에서 추출한 관련 내용
   christianWisdom?: string | null   // 기독교 철학자/신학자의 지혜 (Perplexity 검색)
   verseRelations?: VerseRelation[]  // 성경 구절 간 관계 (GraphRAG)
   verseRelationsText?: string       // 성경 구절 관계 설명 텍스트

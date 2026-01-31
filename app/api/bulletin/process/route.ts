@@ -218,6 +218,38 @@ export async function GET() {
   }
 }
 
+// Task lock 획득 헬퍼
+async function acquireTaskLock(description: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const response = await fetch(`${baseUrl}/api/admin/task-lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskType: 'bulletin', description })
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      return { success: false, message: data.message || '다른 작업이 진행 중입니다.' }
+    }
+    return { success: true }
+  } catch (error) {
+    console.warn('Task lock 획득 실패 (계속 진행):', error)
+    return { success: true } // 락 서비스 에러 시 계속 진행
+  }
+}
+
+// Task lock 해제 헬퍼
+async function releaseTaskLock(): Promise<void> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    await fetch(`${baseUrl}/api/admin/task-lock?taskType=bulletin`, {
+      method: 'DELETE'
+    })
+  } catch (error) {
+    console.warn('Task lock 해제 실패:', error)
+  }
+}
+
 // POST: 스캔 및 처리
 export async function POST(req: NextRequest) {
   try {
@@ -292,7 +324,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'process') {
-      // 미처리 주보 처리
+      // 미처리 주보 조회 (락 획득 전 체크)
       const { data: pendingBulletins } = await supabase
         .from('bulletin_issues')
         .select('*')
@@ -308,69 +340,85 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      const results: any[] = []
-
-      for (const bulletin of pendingBulletins) {
-        try {
-          // 이미지 URL 가져오기
-          const imageUrls = await fetchBulletinImages(bulletin.board_id)
-
-          let totalChunks = 0
-
-          for (let i = 0; i < imageUrls.length; i++) {
-            const ocrText = await performOCR(imageUrls[i])
-
-            if (ocrText) {
-              const chunks = splitIntoChunks(
-                ocrText,
-                bulletin.id,
-                i + 1,
-                bulletin.bulletin_date,
-                bulletin.title
-              )
-
-              for (const chunk of chunks) {
-                try {
-                  const embedding = await createEmbedding(chunk.content)
-                  await supabase.from('bulletin_chunks').insert({
-                    ...chunk,
-                    embedding
-                  })
-                  totalChunks++
-                } catch (e) {
-                  console.error('임베딩 오류')
-                }
-              }
-            }
-
-            await new Promise(r => setTimeout(r, 2000))
-          }
-
-          // 상태 업데이트
-          await supabase
-            .from('bulletin_issues')
-            .update({ status: 'completed', page_count: imageUrls.length })
-            .eq('id', bulletin.id)
-
-          results.push({
-            success: true,
-            bulletinDate: bulletin.bulletin_date,
-            title: bulletin.title,
-            chunks: totalChunks
-          })
-        } catch (error: any) {
-          results.push({
-            success: false,
-            bulletinDate: bulletin.bulletin_date,
-            error: error.message
-          })
-        }
+      // Task lock 획득
+      const lockResult = await acquireTaskLock(`주보 처리 (${pendingBulletins.length}건)`)
+      if (!lockResult.success) {
+        return NextResponse.json({
+          error: lockResult.message,
+          locked: true
+        }, { status: 409 })
       }
 
-      return NextResponse.json({
-        success: true,
-        results
-      })
+      try {
+        const results: any[] = []
+
+        for (const bulletin of pendingBulletins) {
+          try {
+            // 이미지 URL 가져오기
+            const imageUrls = await fetchBulletinImages(bulletin.board_id)
+
+            let totalChunks = 0
+
+            for (let i = 0; i < imageUrls.length; i++) {
+              const ocrText = await performOCR(imageUrls[i])
+
+              if (ocrText) {
+                const chunks = splitIntoChunks(
+                  ocrText,
+                  bulletin.id,
+                  i + 1,
+                  bulletin.bulletin_date,
+                  bulletin.title
+                )
+
+                for (const chunk of chunks) {
+                  try {
+                    const embedding = await createEmbedding(chunk.content)
+                    await supabase.from('bulletin_chunks').insert({
+                      ...chunk,
+                      embedding
+                    })
+                    totalChunks++
+                  } catch (e) {
+                    console.error('임베딩 오류')
+                  }
+                }
+              }
+
+              await new Promise(r => setTimeout(r, 2000))
+            }
+
+            // 상태 업데이트
+            await supabase
+              .from('bulletin_issues')
+              .update({ status: 'completed', page_count: imageUrls.length })
+              .eq('id', bulletin.id)
+
+            results.push({
+              success: true,
+              bulletinDate: bulletin.bulletin_date,
+              title: bulletin.title,
+              chunks: totalChunks
+            })
+          } catch (error: any) {
+            results.push({
+              success: false,
+              bulletinDate: bulletin.bulletin_date,
+              error: error.message
+            })
+          }
+        }
+
+        await releaseTaskLock()
+
+        return NextResponse.json({
+          success: true,
+          results
+        })
+      } catch (error) {
+        await releaseTaskLock()
+        throw error
+      }
     }
 
     return NextResponse.json({ error: '알 수 없는 action입니다.' }, { status: 400 })

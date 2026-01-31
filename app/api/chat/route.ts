@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { searchBibleVerses, hybridSearchSermons, getVersesRelationsForChat } from '@/lib/supabase'
+import { searchBibleVerses, hybridSearchSermons, hybridSearchNews, hybridSearchBulletin, getVersesRelationsForChat } from '@/lib/supabase'
 import { generateStreamingResponse, searchChristianWisdom } from '@/lib/ai-providers'
 import type { ChatMessage, EmotionType } from '@/types'
 
@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
     // 간단 응답 모드인 경우 검색 건너뛰기
     let relevantVerses: any[] = []
     let sermonContent: string | null = null
+    let newsContent: string | null = null
+    let bulletinContent: string | null = null
     let christianWisdom: string | null = null
     let verseRelations: { relations: any[]; explanationText: string } = { relations: [], explanationText: '' }
 
@@ -87,8 +89,34 @@ export async function POST(req: NextRequest) {
         console.warn('[Chat API] 설교 검색 실패:', e)
       }
 
-      // 3. 설교 내용이 없으면 기독교 지혜 검색 (Perplexity 폴백)
-      if (!sermonContent) {
+      // 3. 뉴스 기사 검색 (교회신문)
+      try {
+        const newsResults = await hybridSearchNews(lastUserMessage.content, { limit: 3 })
+        if (newsResults && newsResults.length > 0) {
+          newsContent = newsResults
+            .map((n, i) => `[기사 ${i + 1}] ${n.title} (${n.issue_date}):\n"${n.content.substring(0, 250)}..."`)
+            .join('\n\n')
+          console.log('[Chat API] 뉴스 기사 발견:', newsResults.length, '개')
+        }
+      } catch (e) {
+        console.warn('[Chat API] 뉴스 검색 실패:', e)
+      }
+
+      // 4. 주보 내용 검색
+      try {
+        const bulletinResults = await hybridSearchBulletin(lastUserMessage.content, { limit: 3 })
+        if (bulletinResults && bulletinResults.length > 0) {
+          bulletinContent = bulletinResults
+            .map((b, i) => `[주보 ${i + 1}] ${b.bulletin_title} - ${b.section_type}${b.title ? ` (${b.title})` : ''}:\n"${b.content.substring(0, 250)}..."`)
+            .join('\n\n')
+          console.log('[Chat API] 주보 내용 발견:', bulletinResults.length, '개')
+        }
+      } catch (e) {
+        console.warn('[Chat API] 주보 검색 실패:', e)
+      }
+
+      // 5. 설교/뉴스/주보가 없으면 기독교 지혜 검색 (Perplexity 폴백)
+      if (!sermonContent && !newsContent && !bulletinContent) {
         try {
           // 사용자 메시지에서 주제 추출
           const topic = extractTopic(lastUserMessage.content)
@@ -101,7 +129,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 4. 성경 구절 간 관계 조회
+      // 6. 성경 구절 간 관계 조회
       try {
         const verseRefs = relevantVerses.map((r: any) => r.chunk.referenceFull)
         if (verseRefs.length > 1) {
@@ -115,12 +143,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. 컨텍스트 구성
+    // 7. 컨텍스트 구성
     const context = {
       emotion,
       previousMessages: messages.slice(-10), // 최근 10개 메시지
       relevantVerses,
       sermonContent,
+      newsContent,
+      bulletinContent,
       christianWisdom,
       verseRelations: verseRelations.relations,
       verseRelationsText: verseRelations.explanationText,

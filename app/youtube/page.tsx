@@ -145,6 +145,14 @@ export default function YouTubePage() {
   const [totalChunks, setTotalChunks] = useState(0)
   const [sermonsLoading, setSermonsLoading] = useState(true)
 
+  // Task lock 상태
+  const [taskLock, setTaskLock] = useState<{
+    locked: boolean
+    taskType?: string
+    description?: string
+    elapsedMinutes?: number
+  }>({ locked: false })
+
   // 처리된 설교 목록 로드
   useEffect(() => {
     async function fetchSermons() {
@@ -162,6 +170,23 @@ export default function YouTubePage() {
       }
     }
     fetchSermons()
+  }, [])
+
+  // Task lock 상태 확인
+  useEffect(() => {
+    async function checkTaskLock() {
+      try {
+        const res = await fetch('/api/admin/task-lock')
+        const data = await res.json()
+        setTaskLock(data)
+      } catch (err) {
+        console.warn('Task lock 확인 실패:', err)
+      }
+    }
+    checkTaskLock()
+    // 10초마다 폴링
+    const interval = setInterval(checkTaskLock, 10000)
+    return () => clearInterval(interval)
   }, [])
 
   // URL 변경 시 플레이리스트 여부 확인
@@ -360,6 +385,29 @@ export default function YouTubePage() {
       </header>
 
       <div className="relative z-10 max-w-4xl mx-auto p-6">
+        {/* Task Lock 경고 배너 */}
+        {taskLock.locked && taskLock.taskType !== 'sermon' && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-yellow-800">
+                다른 작업이 진행 중입니다
+              </p>
+              <p className="text-sm text-yellow-700">
+                {taskLock.taskType === 'news' && '뉴스 기사 추출'}
+                {taskLock.taskType === 'bulletin' && '주보 추출'}
+                {taskLock.taskType === 'bible' && '성경 임베딩'}
+                {taskLock.description && ` - ${taskLock.description}`}
+                {taskLock.elapsedMinutes !== undefined && ` (${taskLock.elapsedMinutes}분 경과)`}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* 벡터 임베딩 완료된 설교 목록 */}
         <div className="bg-white/95 rounded-xl border border-amber-100 shadow-sm p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -649,7 +697,7 @@ export default function YouTubePage() {
 
             <button
               onClick={handleExtract}
-              disabled={loading || !videoUrl}
+              disabled={loading || !videoUrl || (taskLock.locked && taskLock.taskType !== 'sermon')}
               className={`w-full px-4 py-3 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all ${
                 isPlaylist
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700'
@@ -658,7 +706,9 @@ export default function YouTubePage() {
             >
               {loading
                 ? (isPlaylist ? '플레이리스트 처리 중...' : '추출 중...')
-                : (isPlaylist ? `플레이리스트 처리 (최대 ${maxVideos}개)` : '스크립트 추출')
+                : taskLock.locked && taskLock.taskType !== 'sermon'
+                  ? '다른 작업 진행 중...'
+                  : (isPlaylist ? `플레이리스트 처리 (최대 ${maxVideos}개)` : '스크립트 추출')
               }
             </button>
           </div>

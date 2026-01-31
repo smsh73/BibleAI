@@ -477,6 +477,38 @@ async function processIssue(
   }
 }
 
+// Task lock 획득 헬퍼
+async function acquireTaskLock(description: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const response = await fetch(`${baseUrl}/api/admin/task-lock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskType: 'news', description })
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      return { success: false, message: data.message || '다른 작업이 진행 중입니다.' }
+    }
+    return { success: true }
+  } catch (error) {
+    console.warn('Task lock 획득 실패 (계속 진행):', error)
+    return { success: true } // 락 서비스 에러 시 계속 진행
+  }
+}
+
+// Task lock 해제 헬퍼
+async function releaseTaskLock(): Promise<void> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    await fetch(`${baseUrl}/api/admin/task-lock?taskType=news`, {
+      method: 'DELETE'
+    })
+  } catch (error) {
+    console.warn('Task lock 해제 실패:', error)
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -529,43 +561,61 @@ export async function POST(req: NextRequest) {
 
     // ============ 단일 호수 처리 ============
     if (action === 'process' && issueNumber) {
-      // DB에서 호수 정보 가져오기 또는 새로 스캔
-      const { data: existingIssue } = await supabase
-        .from('news_issues')
-        .select('*')
-        .eq('issue_number', issueNumber)
-        .single()
-
-      let issueInfo: IssueInfo
-
-      if (existingIssue) {
-        // 기존 정보로 이미지 URL 다시 가져오기
-        const details = await fetchIssueDetails(existingIssue.board_id)
-        if (!details) {
-          return NextResponse.json({ error: '호수 정보를 가져올 수 없습니다.' }, { status: 404 })
-        }
-        issueInfo = details
-      } else {
-        return NextResponse.json({ error: '호수를 찾을 수 없습니다. 먼저 스캔을 실행하세요.' }, { status: 404 })
+      // Task lock 획득
+      const lockResult = await acquireTaskLock(`뉴스 ${issueNumber}호 처리`)
+      if (!lockResult.success) {
+        return NextResponse.json({
+          error: lockResult.message,
+          locked: true
+        }, { status: 409 })
       }
 
-      const result = await processIssue(issueInfo)
-      return NextResponse.json({
-        success: result.success,
-        action: 'process',
-        issueNumber,
-        issueDate: issueInfo.issueDate,
-        articles: result.articles,
-        chunks: result.chunks,
-        error: result.error
-      })
+      try {
+        // DB에서 호수 정보 가져오기 또는 새로 스캔
+        const { data: existingIssue } = await supabase
+          .from('news_issues')
+          .select('*')
+          .eq('issue_number', issueNumber)
+          .single()
+
+        let issueInfo: IssueInfo
+
+        if (existingIssue) {
+          // 기존 정보로 이미지 URL 다시 가져오기
+          const details = await fetchIssueDetails(existingIssue.board_id)
+          if (!details) {
+            await releaseTaskLock()
+            return NextResponse.json({ error: '호수 정보를 가져올 수 없습니다.' }, { status: 404 })
+          }
+          issueInfo = details
+        } else {
+          await releaseTaskLock()
+          return NextResponse.json({ error: '호수를 찾을 수 없습니다. 먼저 스캔을 실행하세요.' }, { status: 404 })
+        }
+
+        const result = await processIssue(issueInfo)
+        await releaseTaskLock()
+
+        return NextResponse.json({
+          success: result.success,
+          action: 'process',
+          issueNumber,
+          issueDate: issueInfo.issueDate,
+          articles: result.articles,
+          chunks: result.chunks,
+          error: result.error
+        })
+      } catch (error) {
+        await releaseTaskLock()
+        throw error
+      }
     }
 
     // ============ 증분 처리: 미처리 호수만 처리 ============
     if (action === 'process_incremental') {
       console.log('증분 처리 시작...')
 
-      // 스캔 (새로운 유연한 방식 + 레거시 호환)
+      // 스캔 (새로운 유연한 방식 + 레거시 호환) - 스캔은 락 없이 수행
       const issues = await scanAllIssues({
         listPageUrl: config?.listPageUrl,
         startUrl: config?.startUrl,
@@ -593,30 +643,46 @@ export async function POST(req: NextRequest) {
         })
       }
 
-      // 처리
-      const results = []
-      for (const issue of pendingIssues) {
-        const result = await processIssue(issue)
-        results.push({
-          issueNumber: issue.issueNumber,
-          issueDate: issue.issueDate,
-          ...result
-        })
+      // Task lock 획득 (처리 시작 전)
+      const lockResult = await acquireTaskLock(`뉴스 증분 처리 (${pendingIssues.length}건)`)
+      if (!lockResult.success) {
+        return NextResponse.json({
+          error: lockResult.message,
+          locked: true
+        }, { status: 409 })
       }
 
-      const successCount = results.filter(r => r.success).length
-      const totalArticles = results.reduce((sum, r) => sum + r.articles, 0)
-      const totalChunks = results.reduce((sum, r) => sum + r.chunks, 0)
+      try {
+        // 처리
+        const results = []
+        for (const issue of pendingIssues) {
+          const result = await processIssue(issue)
+          results.push({
+            issueNumber: issue.issueNumber,
+            issueDate: issue.issueDate,
+            ...result
+          })
+        }
 
-      return NextResponse.json({
-        success: true,
-        action: 'process_incremental',
-        processed: successCount,
-        failed: results.length - successCount,
-        totalArticles,
-        totalChunks,
-        results
-      })
+        const successCount = results.filter(r => r.success).length
+        const totalArticles = results.reduce((sum, r) => sum + r.articles, 0)
+        const totalChunks = results.reduce((sum, r) => sum + r.chunks, 0)
+
+        await releaseTaskLock()
+
+        return NextResponse.json({
+          success: true,
+          action: 'process_incremental',
+          processed: successCount,
+          failed: results.length - successCount,
+          totalArticles,
+          totalChunks,
+          results
+        })
+      } catch (error) {
+        await releaseTaskLock()
+        throw error
+      }
     }
 
     // ============ 전체 처리 (주의: 시간이 오래 걸림) ============
