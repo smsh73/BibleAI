@@ -70,3 +70,74 @@ body {
 .animate-slide-up {
   animation: slide-up 0.3s ease-out forwards;
 }
+
+/* 물결 텍스트 애니메이션 - 스카프/바람에 날리는 효과 */
+@keyframes wave {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  25% {
+    transform: translateY(-3px) rotate(-1deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-5px) rotate(0deg);
+    opacity: 0.8;
+  }
+  75% {
+    transform: translateY(-3px) rotate(1deg);
+    opacity: 0.9;
+  }
+}
+
+.animate-wave {
+  animation: wave 2s ease-in-out infinite;
+  display: inline-block;
+}
+
+/* 기도손 왼손 애니메이션 */
+@keyframes pray-left {
+  0%, 100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(1px) rotate(-2deg);
+  }
+}
+
+.animate-pray-left {
+  animation: pray-left 1.5s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+/* 기도손 오른손 애니메이션 */
+@keyframes pray-right {
+  0%, 100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    transform: translateX(-1px) rotate(2deg);
+  }
+}
+
+.animate-pray-right {
+  animation: pray-right 1.5s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+/* 빛 효과 애니메이션 */
+@keyframes glow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.animate-glow {
+  animation: glow 1.2s ease-in-out infinite;
+}

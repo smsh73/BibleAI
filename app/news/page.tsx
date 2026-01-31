@@ -8,6 +8,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { PrayingHandsLoader } from '@/components/LoadingAnimations'
 
 interface ChatMessage {
   id: string
@@ -540,10 +541,11 @@ export default function NewsPage() {
                   {loading && (
                     <div className="flex justify-start animate-fade-in">
                       <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-amber-100">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl animate-pulse-slow">🙏</span>
-                          <span className="text-sm text-indigo-600 animate-pulse">기사를 찾고 있습니다...</span>
-                        </div>
+                        <PrayingHandsLoader
+                          message="기사를 찾고 있습니다..."
+                          iconClassName="w-6 h-6 text-amber-600"
+                          textClassName="text-sm text-amber-600 font-medium"
+                        />
                       </div>
                     </div>
                   )}

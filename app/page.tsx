@@ -10,6 +10,7 @@ import Image from 'next/image'
 import { EMOTIONS, type EmotionType, type ChatMessage } from '@/types'
 import JesusSilhouette from '@/components/JesusSilhouette'
 import { useLanguage } from '@/contexts/LanguageContext'
+import { PrayingHandsLoader } from '@/components/LoadingAnimations'
 
 interface VerseReference {
   reference: string
@@ -54,16 +55,6 @@ const BIBLE_BOOKS = [
   '야고보서', '베드로전서', '베드로후서', '요한일서', '요한이서',
   '요한삼서', '유다서', '요한계시록'
 ]
-
-// 기도손 애니메이션 컴포넌트
-function PrayingHandsLoader({ className = '' }: { className?: string }) {
-  return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <span className="text-xl animate-pulse-slow">🙏</span>
-      <span className="text-sm text-amber-600 animate-pulse">말씀을 찾고 있습니다...</span>
-    </div>
-  )
-}
 
 // 성경 구절 참조를 링크로 변환하는 함수
 function parseBibleReferences(text: string): React.ReactNode[] {
@@ -224,8 +215,8 @@ function NewsDetailPopup({
         <div className="p-5 overflow-y-auto max-h-[50vh]">
           {loadingContent ? (
             <div className="flex items-center justify-center py-8">
-              <span className="text-2xl animate-pulse-slow mr-3">🙏</span>
-              <span className="text-indigo-600 text-sm animate-pulse">기사를 불러오는 중...</span>
+              <PrayingHandsIcon className="w-7 h-7 text-indigo-600 mr-3" />
+              <WaveText text="기사를 불러오는 중..." className="text-indigo-600 text-sm font-medium" />
             </div>
           ) : displayContent ? (
             <p className="text-gray-700 whitespace-pre-wrap leading-relaxed text-base">
@@ -1028,7 +1019,7 @@ export default function Home() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
                           <span className="text-sm font-medium text-amber-800">
-                            {language === 'en' ? 'Comfort Image' : '위로 이미지'}
+                            {language === 'en' ? 'Expressing Heart' : '마음 표현'}
                           </span>
                         </div>
                         {mediaLoading.image ? (
@@ -1237,10 +1228,10 @@ export default function Home() {
                     {/* 로딩 표시 - 기도손 애니메이션 */}
                     {newsLoading && !newsMessages.find(m => m.role === 'assistant' && m.content) && (
                       <div className="flex justify-start animate-fade-in">
-                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-indigo-100">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xl animate-pulse-slow">🙏</span>
-                            <span className="text-sm text-indigo-600 animate-pulse">기사를 찾고 있습니다...</span>
+                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-amber-100">
+                          <div className="flex items-center gap-3">
+                            <PrayingHandsIcon className="w-6 h-6 text-amber-600" />
+                            <WaveText text="기사를 찾고 있습니다..." className="text-sm text-amber-600 font-medium" />
                           </div>
                         </div>
                       </div>

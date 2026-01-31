@@ -68,9 +68,9 @@ async function generateWithOpenAI(params: GenerateAudioParams): Promise<AudioGen
 
     const response = await openai.audio.speech.create({
       model: 'tts-1',
-      voice: 'onyx', // 깊고 따뜻한 남성 음성
+      voice: 'echo', // 부드럽고 따뜻한 남성 음성
       input: trimmedScript,
-      speed: 0.95 // 약간 느리게 (차분하고 여유로운 느낌)
+      speed: 0.92 // 천천히 (더욱 차분하고 따뜻한 느낌)
     })
 
     // ArrayBuffer를 Base64로 변환
