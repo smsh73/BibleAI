@@ -153,7 +153,7 @@ export default function YouTubePage() {
     elapsedMinutes?: number
   }>({ locked: false })
 
-  // 처리된 설교 목록 로드
+  // 처리된 설교 목록 로드 (설교 작업 진행 중이면 주기적 갱신)
   useEffect(() => {
     async function fetchSermons() {
       try {
@@ -170,7 +170,13 @@ export default function YouTubePage() {
       }
     }
     fetchSermons()
-  }, [])
+
+    // 설교 작업 진행 중이면 15초마다 목록 갱신
+    if (taskLock.locked && taskLock.taskType === 'sermon') {
+      const interval = setInterval(fetchSermons, 15000)
+      return () => clearInterval(interval)
+    }
+  }, [taskLock.locked, taskLock.taskType])
 
   // Task lock 상태 확인
   useEffect(() => {
@@ -385,7 +391,7 @@ export default function YouTubePage() {
       </header>
 
       <div className="relative z-10 max-w-4xl mx-auto p-6">
-        {/* Task Lock 경고 배너 */}
+        {/* Task Lock 경고 배너 - 다른 작업 진행 중 */}
         {taskLock.locked && taskLock.taskType !== 'sermon' && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 flex items-center gap-3">
             <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -403,6 +409,28 @@ export default function YouTubePage() {
                 {taskLock.taskType === 'bible' && '성경 임베딩'}
                 {taskLock.description && ` - ${taskLock.description}`}
                 {taskLock.elapsedMinutes !== undefined && ` (${taskLock.elapsedMinutes}분 경과)`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 설교 추출 진행 중 배너 */}
+        {taskLock.locked && taskLock.taskType === 'sermon' && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mb-6 flex items-center gap-3">
+            <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <div className="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-amber-800">
+                설교 추출 작업이 백그라운드에서 진행 중입니다
+              </p>
+              <p className="text-sm text-amber-700">
+                {taskLock.description && `${taskLock.description}`}
+                {taskLock.elapsedMinutes !== undefined && ` • ${taskLock.elapsedMinutes}분 경과`}
+                {' • '}현재 {processedSermons.length}개 설교, {totalChunks.toLocaleString()}개 청크 완료
+              </p>
+              <p className="text-xs text-amber-600 mt-1">
+                브라우저를 닫아도 작업은 계속됩니다. 완료될 때까지 기다려 주세요.
               </p>
             </div>
           </div>
@@ -697,7 +725,7 @@ export default function YouTubePage() {
 
             <button
               onClick={handleExtract}
-              disabled={loading || !videoUrl || (taskLock.locked && taskLock.taskType !== 'sermon')}
+              disabled={loading || !videoUrl || taskLock.locked}
               className={`w-full px-4 py-3 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all ${
                 isPlaylist
                   ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700'
@@ -706,9 +734,11 @@ export default function YouTubePage() {
             >
               {loading
                 ? (isPlaylist ? '플레이리스트 처리 중...' : '추출 중...')
-                : taskLock.locked && taskLock.taskType !== 'sermon'
-                  ? '다른 작업 진행 중...'
-                  : (isPlaylist ? `플레이리스트 처리 (최대 ${maxVideos}개)` : '스크립트 추출')
+                : taskLock.locked && taskLock.taskType === 'sermon'
+                  ? '설교 추출 진행 중...'
+                  : taskLock.locked
+                    ? '다른 작업 진행 중...'
+                    : (isPlaylist ? `플레이리스트 처리 (최대 ${maxVideos}개)` : '스크립트 추출')
               }
             </button>
           </div>
