@@ -118,11 +118,18 @@ export async function POST(req: NextRequest) {
 
     if (client) {
       // 기존 활성 잠금 확인
-      const { data: existing } = await client
+      const { data: existing, error: selectError } = await client
         .from('task_locks')
         .select('*')
         .eq('is_active', true)
         .single()
+
+      // 테이블이 없으면 메모리 잠금 사용
+      if (selectError?.message?.includes('does not exist') ||
+          selectError?.message?.includes('Could not find') ||
+          selectError?.code === 'PGRST205') {
+        return acquireMemoryLock(taskType, description)
+      }
 
       if (existing) {
         // 타임아웃 체크
@@ -164,7 +171,9 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) {
-        if (error.message?.includes('does not exist')) {
+        if (error.message?.includes('does not exist') ||
+            error.message?.includes('Could not find') ||
+            error.code === 'PGRST205') {
           return acquireMemoryLock(taskType, description)
         }
         throw error
