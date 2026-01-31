@@ -371,13 +371,13 @@ export default function AdminPage() {
                             setEditing(apiKey.provider)
                             setFormData(prev => ({ ...prev, provider: apiKey.provider, key: '' }))
                           }}
-                          className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors"
+                          className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-sm font-medium transition-colors"
                         >
                           수정
                         </button>
                         <button
                           onClick={() => handleApiDelete(apiKey.provider)}
-                          className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-medium transition-colors"
+                          className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors"
                         >
                           삭제
                         </button>
@@ -452,7 +452,7 @@ export default function AdminPage() {
 
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 font-medium transition-colors"
+                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors"
                   >
                     {editing ? '수정하기' : '추가하기'}
                   </button>
@@ -573,7 +573,7 @@ export default function AdminPage() {
                               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                                 isComplete
                                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50'
+                                  : 'bg-amber-100 text-amber-700 hover:bg-amber-200 disabled:opacity-50'
                               }`}
                             >
                               {isExtracting ? '처리중...' : '추출'}
@@ -584,7 +584,7 @@ export default function AdminPage() {
                               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                                 isComplete || !hasVerses
                                   ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-50'
+                                  : 'bg-orange-100 text-orange-700 hover:bg-orange-200 disabled:opacity-50'
                               }`}
                             >
                               임베딩
@@ -632,8 +632,8 @@ export default function AdminPage() {
                 <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {/* 뉴스 */}
-                  <div className="bg-indigo-50 rounded-lg p-4 border border-indigo-100">
-                    <h3 className="font-semibold text-indigo-900 mb-3">열한시 뉴스</h3>
+                  <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                    <h3 className="font-semibold text-amber-900 mb-3">열한시 뉴스</h3>
                     <div className="space-y-1 text-sm">
                       <p className="text-gray-600">호수: <strong>{dataStats.newsIssues}</strong>개</p>
                       <p className="text-gray-600">청크: <strong>{dataStats.newsChunks}</strong>개</p>
@@ -642,8 +642,8 @@ export default function AdminPage() {
                   </div>
 
                   {/* 주보 */}
-                  <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                    <h3 className="font-semibold text-green-900 mb-3">주보</h3>
+                  <div className="bg-orange-50 rounded-lg p-4 border border-orange-100">
+                    <h3 className="font-semibold text-orange-900 mb-3">주보</h3>
                     <div className="space-y-1 text-sm">
                       <p className="text-gray-600">주보: <strong>{dataStats.bulletinIssues || 0}</strong>개</p>
                       <p className="text-gray-600">청크: <strong>{dataStats.bulletinChunks || 0}</strong>개</p>
@@ -651,8 +651,8 @@ export default function AdminPage() {
                   </div>
 
                   {/* 성경 */}
-                  <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
-                    <h3 className="font-semibold text-amber-900 mb-3">성경</h3>
+                  <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
+                    <h3 className="font-semibold text-yellow-900 mb-3">성경</h3>
                     <div className="space-y-1 text-sm">
                       <p className="text-gray-600">구절: <strong>{dataStats.bibleVerses?.toLocaleString()}</strong>개</p>
                       <p className="text-gray-600">임베딩: <strong>{dataStats.bibleEmbedded?.toLocaleString()}</strong>개</p>
@@ -660,8 +660,8 @@ export default function AdminPage() {
                   </div>
 
                   {/* 설교 */}
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
-                    <h3 className="font-semibold text-purple-900 mb-3">설교</h3>
+                  <div className="bg-amber-100 rounded-lg p-4 border border-amber-200">
+                    <h3 className="font-semibold text-amber-900 mb-3">설교</h3>
                     <div className="space-y-1 text-sm">
                       <p className="text-gray-600">설교: <strong>{dataStats.sermons}</strong>개</p>
                       <p className="text-gray-600">청크: <strong>{dataStats.sermonChunks}</strong>개</p>
@@ -670,25 +670,25 @@ export default function AdminPage() {
                 </div>
 
                 {/* 성경 구절 관계 통계 */}
-                <div className="mt-6 bg-rose-50 rounded-lg p-4 border border-rose-100">
-                  <h3 className="font-semibold text-rose-900 mb-3">성경 구절 관계 (GraphRAG)</h3>
+                <div className="mt-6 bg-orange-50 rounded-lg p-4 border border-orange-200">
+                  <h3 className="font-semibold text-orange-900 mb-3">성경 구절 관계 (GraphRAG)</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <div className="text-center p-3 bg-white rounded-lg border border-rose-200">
-                      <div className="text-2xl font-bold text-rose-700">{dataStats.verseRelations || 0}</div>
+                    <div className="text-center p-3 bg-white rounded-lg border border-orange-200">
+                      <div className="text-2xl font-bold text-orange-700">{dataStats.verseRelations || 0}</div>
                       <div className="text-xs text-gray-600">구절 연결</div>
                     </div>
-                    <div className="text-center p-3 bg-white rounded-lg border border-rose-200">
-                      <div className="text-2xl font-bold text-rose-700">{dataStats.verseThemes || 0}</div>
+                    <div className="text-center p-3 bg-white rounded-lg border border-orange-200">
+                      <div className="text-2xl font-bold text-orange-700">{dataStats.verseThemes || 0}</div>
                       <div className="text-xs text-gray-600">주제 태그</div>
                     </div>
-                    <div className="text-center p-3 bg-white rounded-lg border border-rose-200">
-                      <div className="text-2xl font-bold text-rose-700">
+                    <div className="text-center p-3 bg-white rounded-lg border border-orange-200">
+                      <div className="text-2xl font-bold text-orange-700">
                         {Object.keys(dataStats.relationTypeCount || {}).length}
                       </div>
                       <div className="text-xs text-gray-600">관계 유형</div>
                     </div>
-                    <div className="text-center p-3 bg-white rounded-lg border border-rose-200">
-                      <div className="text-2xl font-bold text-rose-700">
+                    <div className="text-center p-3 bg-white rounded-lg border border-orange-200">
+                      <div className="text-2xl font-bold text-orange-700">
                         {Object.values(dataStats.relationTypeCount || {}).reduce((a, b) => a + b, 0)}
                       </div>
                       <div className="text-xs text-gray-600">총 연결 수</div>
@@ -713,11 +713,11 @@ export default function AdminPage() {
                           return (
                             <span
                               key={type}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-white rounded-full text-xs border border-rose-200"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-white rounded-full text-xs border border-orange-200"
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
                               <span className="text-gray-700">{typeLabels[type] || type}</span>
-                              <span className="font-semibold text-rose-600">{count}</span>
+                              <span className="font-semibold text-orange-600">{count}</span>
                             </span>
                           )
                         })}
@@ -732,8 +732,8 @@ export default function AdminPage() {
             </div>
 
             {/* 데이터 초기화 */}
-            <div className="bg-white/95 rounded-xl shadow-sm border border-red-100 p-6">
-              <h2 className="text-lg font-semibold text-red-900 mb-4">데이터 초기화</h2>
+            <div className="bg-white/95 rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">데이터 초기화</h2>
               <p className="text-sm text-gray-600 mb-4">
                 주의: 삭제된 데이터는 복구할 수 없습니다. 신중하게 진행하세요.
               </p>
@@ -742,54 +742,54 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => handleDataReset('news')}
-                  className="p-4 border-2 border-red-200 rounded-lg text-left hover:bg-red-50 transition-colors"
+                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
                 >
-                  <h3 className="font-semibold text-red-800 mb-1">뉴스 데이터 삭제</h3>
+                  <h3 className="font-semibold text-gray-800 mb-1">뉴스 데이터 삭제</h3>
                   <p className="text-sm text-gray-500">호수, 기사, 청크, 임베딩 모두 삭제</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDataReset('bulletin')}
-                  className="p-4 border-2 border-red-200 rounded-lg text-left hover:bg-red-50 transition-colors"
+                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
                 >
-                  <h3 className="font-semibold text-red-800 mb-1">주보 데이터 삭제</h3>
+                  <h3 className="font-semibold text-gray-800 mb-1">주보 데이터 삭제</h3>
                   <p className="text-sm text-gray-500">주보, 섹션, 청크 모두 삭제</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDataReset('bible')}
-                  className="p-4 border-2 border-red-200 rounded-lg text-left hover:bg-red-50 transition-colors"
+                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
                 >
-                  <h3 className="font-semibold text-red-800 mb-1">성경 임베딩 삭제</h3>
+                  <h3 className="font-semibold text-gray-800 mb-1">성경 임베딩 삭제</h3>
                   <p className="text-sm text-gray-500">구절 텍스트는 유지, 임베딩만 삭제</p>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDataReset('sermons')}
-                  className="p-4 border-2 border-red-200 rounded-lg text-left hover:bg-red-50 transition-colors"
+                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
                 >
-                  <h3 className="font-semibold text-red-800 mb-1">설교 데이터 삭제</h3>
+                  <h3 className="font-semibold text-gray-800 mb-1">설교 데이터 삭제</h3>
                   <p className="text-sm text-gray-500">설교 및 청크 모두 삭제</p>
                 </button>
               </div>
             </div>
 
             {/* 전체 초기화 (별도 섹션) */}
-            <div className="bg-red-50 rounded-xl shadow-sm border-2 border-red-300 p-6">
+            <div className="bg-amber-50 rounded-xl shadow-sm border-2 border-amber-300 p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-red-900 mb-1">전체 데이터 초기화</h2>
-                  <p className="text-sm text-red-700">
+                  <h2 className="text-lg font-semibold text-amber-900 mb-1">전체 데이터 초기화</h2>
+                  <p className="text-sm text-amber-700">
                     뉴스, 주보, 성경 임베딩, 설교 데이터를 모두 삭제합니다. 이 작업은 되돌릴 수 없습니다.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleDataReset('all')}
-                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
+                  className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
                 >
                   전체 초기화
                 </button>
