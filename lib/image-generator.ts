@@ -124,7 +124,7 @@ async function generateWithOpenAI(params: GenerateImageParams): Promise<ImageGen
       style: 'vivid'
     })
 
-    const imageUrl = response.data[0]?.url
+    const imageUrl = response.data?.[0]?.url
 
     if (imageUrl) {
       return {

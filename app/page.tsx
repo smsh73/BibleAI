@@ -10,7 +10,7 @@ import Image from 'next/image'
 import { EMOTIONS, type EmotionType, type ChatMessage } from '@/types'
 import JesusSilhouette from '@/components/JesusSilhouette'
 import { useLanguage } from '@/contexts/LanguageContext'
-import { PrayingHandsLoader } from '@/components/LoadingAnimations'
+import { PrayingHandsIcon, WaveText, PrayingHandsLoader } from '@/components/LoadingAnimations'
 
 interface VerseReference {
   reference: string
