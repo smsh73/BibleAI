@@ -89,6 +89,7 @@ export interface ConversationContext {
   verseRelations?: VerseRelation[]  // 성경 구절 간 관계 (GraphRAG)
   verseRelationsText?: string       // 성경 구절 관계 설명 텍스트
   simpleMode?: boolean              // 간단 응답 모드 (인사, 짧은 메시지)
+  language?: 'ko' | 'en'            // UI 언어 (한국어/영어)
 }
 
 export interface EmbeddingModel {

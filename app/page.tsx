@@ -435,6 +435,7 @@ export default function Home() {
           messages: [...messages, userMessage],
           emotion,
           version: selectedVersion,  // 선택된 성경 버전 전달
+          language,  // UI 언어 전달 (en/ko)
           simpleMode: isSimple  // 간단 응답 모드 플래그
         })
       })

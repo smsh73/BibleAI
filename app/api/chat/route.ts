@@ -19,13 +19,14 @@ interface ChatRequest {
   messages: ChatMessage[]
   emotion?: EmotionType
   version?: string  // 성경 버전 (GAE, KRV, NIV 등)
+  language?: 'ko' | 'en'  // UI 언어 (한국어/영어)
   simpleMode?: boolean  // 간단 응답 모드 (인사, 짧은 메시지)
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body: ChatRequest = await req.json()
-    const { messages, emotion, version, simpleMode } = body
+    const { messages, emotion, version, language, simpleMode } = body
 
     if (!messages || messages.length === 0) {
       return NextResponse.json(
@@ -169,7 +170,8 @@ export async function POST(req: NextRequest) {
       christianWisdom,
       verseRelations: verseRelations.relations,
       verseRelationsText: verseRelations.explanationText,
-      simpleMode  // 간단 응답 모드 플래그 전달
+      simpleMode,  // 간단 응답 모드 플래그 전달
+      language: language || 'ko'  // UI 언어 (기본값: 한국어)
     }
 
     // 6. 스트리밍 응답 생성
