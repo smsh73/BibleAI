@@ -227,12 +227,15 @@ export async function PATCH(req: NextRequest) {
       const client = getSupabaseAdmin()
 
       if (client) {
-        await client
-          .from('task_locks')
-          .update({ stop_requested: true })
-          .eq('is_active', true)
-          .eq('task_type', taskType || memoryLock.taskType || '')
-          .catch(() => {})  // 테이블 없으면 무시
+        try {
+          await client
+            .from('task_locks')
+            .update({ stop_requested: true })
+            .eq('is_active', true)
+            .eq('task_type', taskType || memoryLock.taskType || '')
+        } catch {
+          // 테이블 없으면 무시
+        }
       }
 
       // 메모리 잠금에도 중지 요청 설정

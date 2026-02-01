@@ -18,23 +18,114 @@ let anthropic: Anthropic | null = null
 let genAI: GoogleGenerativeAI | null = null
 let supabase: ReturnType<typeof createClient> | null = null
 
-function getOpenAI(): OpenAI {
+// API 키 캐시 (TTL 기반 - 5분마다 갱신)
+let apiKeyCache: Record<string, string> = {}
+let apiKeyCacheLoaded = false
+let apiKeyCacheTime = 0
+const API_KEY_CACHE_TTL = 5 * 60 * 1000 // 5분
+
+type AIProvider = 'openai' | 'anthropic' | 'google' | 'perplexity' | 'youtube'
+
+/**
+ * Supabase에서 저장된 API 키 가져오기
+ * 관리자가 저장한 키가 환경변수보다 우선
+ */
+async function fetchStoredApiKeys(): Promise<Record<string, string>> {
+  const now = Date.now()
+
+  // 캐시가 유효하고 키가 있으면 캐시 반환
+  if (apiKeyCacheLoaded && Object.keys(apiKeyCache).length > 0 && (now - apiKeyCacheTime) < API_KEY_CACHE_TTL) {
+    return apiKeyCache
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl || !supabaseKey) {
+    apiKeyCacheLoaded = true
+    return {}
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/api_keys?is_active=eq.true&order=priority.asc`, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      apiKeyCacheLoaded = true
+      return {}
+    }
+
+    const data = await response.json()
+    const keys: Record<string, string> = {}
+    for (const row of data) {
+      try {
+        keys[row.provider] = typeof atob === 'function'
+          ? atob(row.key)
+          : Buffer.from(row.key, 'base64').toString('utf-8')
+      } catch {
+        keys[row.provider] = row.key
+      }
+    }
+
+    apiKeyCache = keys
+    apiKeyCacheLoaded = true
+    apiKeyCacheTime = Date.now()
+    console.log('[news-extractor] API 키 로드:', Object.keys(keys).join(', '))
+    return keys
+  } catch (error) {
+    apiKeyCacheTime = Date.now() - API_KEY_CACHE_TTL + 60000
+    return apiKeyCache
+  }
+}
+
+/**
+ * API 키 가져오기 (우선순위: 관리자 저장 키 > 환경변수)
+ */
+async function getApiKey(provider: AIProvider): Promise<string | null> {
+  const storedKeys = await fetchStoredApiKeys()
+  if (storedKeys[provider]) {
+    return storedKeys[provider]
+  }
+
+  const envKeys: Record<AIProvider, string | undefined> = {
+    openai: process.env.OPENAI_API_KEY,
+    anthropic: process.env.ANTHROPIC_API_KEY,
+    google: process.env.GOOGLE_API_KEY,
+    perplexity: process.env.PERPLEXITY_API_KEY,
+    youtube: process.env.YOUTUBE_API_KEY
+  }
+
+  return envKeys[provider] || null
+}
+
+async function getOpenAI(): Promise<OpenAI> {
   if (!openai) {
-    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const apiKey = await getApiKey('openai')
+    if (!apiKey) throw new Error('OpenAI API key not available')
+    openai = new OpenAI({ apiKey })
   }
   return openai
 }
 
-function getAnthropic(): Anthropic {
+async function getAnthropic(): Promise<Anthropic> {
   if (!anthropic) {
-    anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const apiKey = await getApiKey('anthropic')
+    if (!apiKey) throw new Error('Anthropic API key not available')
+    anthropic = new Anthropic({ apiKey })
   }
   return anthropic
 }
 
-function getGenAI(): GoogleGenerativeAI {
+async function getGenAI(): Promise<GoogleGenerativeAI> {
   if (!genAI) {
-    genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '')
+    const apiKey = await getApiKey('google')
+    if (!apiKey) throw new Error('Google API key not available')
+    genAI = new GoogleGenerativeAI(apiKey)
   }
   return genAI
 }
@@ -43,15 +134,24 @@ function getSupabase() {
   if (!supabase) {
     supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY!
     )
   }
   return supabase
 }
 
-// OCR 프롬프트
+// OCR 프롬프트 - 정확성 강조 버전
 const OCR_PROMPT = `이 이미지는 한국 교회의 월간 신문 "열한시"의 한 면입니다.
-이미지에서 모든 한글 텍스트를 정확하게 추출해주세요.
+
+⚠️ 중요: 텍스트를 정확하게 읽어주세요. 추측하거나 비슷한 단어로 대체하지 마세요.
+
+정확성 규칙 (반드시 준수):
+1. 이름, 직함, 숫자는 이미지에 보이는 그대로 정확히 읽기
+   - 예: "최원준 위임목사" → 그대로 출력 (절대 "최재호 위원목사"로 바꾸지 말 것)
+   - 예: "만나홀" → 그대로 출력 (절대 "한나홀"로 바꾸지 말 것)
+2. 불확실한 글자는 [?]로 표시하되, 추측하지 말 것
+3. 고유명사(사람 이름, 장소명, 팀명)는 특히 주의
+4. 한글 초성 구분: ㅁ/ㅎ, ㄴ/ㄹ, ㅇ/ㅁ 등 비슷한 글자 주의
 
 추출 규칙:
 1. 제목, 소제목, 본문 내용을 모두 추출
@@ -63,12 +163,32 @@ const OCR_PROMPT = `이 이미지는 한국 교회의 월간 신문 "열한시"�
 
 형식:
 ### 기사 1
-제목: (제목)
+제목: (제목 - 정확히)
 유형: (목회편지/교회소식/행사안내/광고/인물소개/기타)
-내용: (본문 내용)
+내용: (본문 내용 - 정확히)
 
 ### 기사 2
 ...`
+
+// OCR 결과 검증/교정 프롬프트
+const OCR_VERIFY_PROMPT = `당신은 한국어 OCR 결과를 검증하는 전문가입니다.
+아래 OCR 결과를 원본 이미지와 비교하여 오류를 교정해주세요.
+
+흔한 OCR 오류 패턴:
+- 만나홀 → 한나홀 (ㅁ/ㅎ 혼동)
+- 위임목사 → 위원목사
+- 요르단 → 요즘형
+- 공연 → 청
+- 워쉽 → 사역
+
+교정 규칙:
+1. 이미지에 보이는 텍스트와 정확히 일치하도록 수정
+2. 사람 이름, 장소명, 팀명은 특히 주의깊게 확인
+3. 문맥상 말이 안 되는 부분은 이미지를 다시 확인
+4. 숫자와 날짜 정확히 확인
+
+OCR 결과:
+`
 
 // 메타데이터 추출 프롬프트
 const METADATA_PROMPT = `다음 신문 기사 텍스트에서 메타데이터를 추출해주세요.
@@ -119,7 +239,8 @@ export interface CrawlConfig {
 // ============ OCR 함수 ============
 
 async function extractWithOpenAI(base64Image: string, mimeType: string = 'image/jpeg'): Promise<string> {
-  const response = await getOpenAI().chat.completions.create({
+  const client = await getOpenAI()
+  const response = await client.chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
@@ -139,7 +260,8 @@ async function extractWithOpenAI(base64Image: string, mimeType: string = 'image/
 }
 
 async function extractWithGemini(base64Image: string, mimeType: string = 'image/jpeg'): Promise<string> {
-  const model = getGenAI().getGenerativeModel({ model: 'gemini-1.5-pro' })
+  const client = await getGenAI()
+  const model = client.getGenerativeModel({ model: 'gemini-1.5-pro' })
   const result = await model.generateContent([
     { inlineData: { mimeType, data: base64Image } },
     { text: OCR_PROMPT }
@@ -148,7 +270,8 @@ async function extractWithGemini(base64Image: string, mimeType: string = 'image/
 }
 
 async function extractWithClaude(base64Image: string, mimeType: string = 'image/jpeg'): Promise<string> {
-  const response = await getAnthropic().messages.create({
+  const client = await getAnthropic()
+  const response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,
     messages: [
@@ -166,39 +289,141 @@ async function extractWithClaude(base64Image: string, mimeType: string = 'image/
 }
 
 /**
- * OCR 실행 (fallback: OpenAI -> Gemini -> Claude)
+ * OCR 결과를 원본 이미지와 비교하여 검증/교정
+ * 다른 모델을 사용하여 cross-check
+ */
+async function verifyOCRWithImage(
+  ocrText: string,
+  base64Image: string,
+  mimeType: string = 'image/jpeg',
+  originalProvider: string
+): Promise<string> {
+  // 원본 제공자와 다른 모델로 검증
+  const verifyPrompt = `${OCR_VERIFY_PROMPT}
+---
+${ocrText}
+---
+
+위 OCR 결과를 이미지와 비교하여 오류가 있으면 교정한 전체 텍스트를 출력해주세요.
+오류가 없으면 원본 그대로 출력해주세요.
+설명 없이 교정된 텍스트만 출력하세요.`
+
+  try {
+    // Claude로 검증 (가장 정확한 한국어 인식)
+    if (originalProvider !== 'Claude') {
+      const client = await getAnthropic()
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mimeType as any, data: base64Image } },
+              { type: 'text', text: verifyPrompt }
+            ]
+          }
+        ]
+      })
+      const textBlock = response.content.find(block => block.type === 'text')
+      if (textBlock) {
+        console.log('[OCR 검증] Claude로 교정 완료')
+        return (textBlock as any).text
+      }
+    }
+
+    // OpenAI로 검증
+    if (originalProvider !== 'OpenAI') {
+      const client = await getOpenAI()
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: verifyPrompt },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Image}`, detail: 'high' }
+              }
+            ]
+          }
+        ],
+        max_tokens: 4096
+      })
+      if (response.choices[0].message.content) {
+        console.log('[OCR 검증] OpenAI로 교정 완료')
+        return response.choices[0].message.content
+      }
+    }
+  } catch (error: any) {
+    console.log(`[OCR 검증] 검증 실패, 원본 사용: ${error.message?.substring(0, 50)}`)
+  }
+
+  return ocrText // 검증 실패시 원본 반환
+}
+
+/**
+ * OCR 실행 (fallback: OpenAI -> Gemini -> Claude) + 검증
+ * @param verify - true이면 다른 모델로 결과 검증 (기본값: true)
  */
 export async function performOCR(
   imageData: Buffer | string,
-  mimeType: string = 'image/jpeg'
-): Promise<{ text: string; provider: string }> {
+  mimeType: string = 'image/jpeg',
+  verify: boolean = true
+): Promise<{ text: string; provider: string; verified: boolean }> {
   const base64 = Buffer.isBuffer(imageData) ? imageData.toString('base64') : imageData
+  let ocrResult: { text: string; provider: string } | null = null
 
   // 1. OpenAI 시도
   try {
     const text = await extractWithOpenAI(base64, mimeType)
-    return { text, provider: 'OpenAI' }
+    ocrResult = { text, provider: 'OpenAI' }
   } catch (error: any) {
     console.log(`OpenAI 실패: ${error.message?.substring(0, 50)}...`)
   }
 
   // 2. Gemini 시도
-  try {
-    const text = await extractWithGemini(base64, mimeType)
-    return { text, provider: 'Gemini' }
-  } catch (error: any) {
-    console.log(`Gemini 실패: ${error.message?.substring(0, 50)}...`)
+  if (!ocrResult) {
+    try {
+      const text = await extractWithGemini(base64, mimeType)
+      ocrResult = { text, provider: 'Gemini' }
+    } catch (error: any) {
+      console.log(`Gemini 실패: ${error.message?.substring(0, 50)}...`)
+    }
   }
 
   // 3. Claude 시도
-  try {
-    const text = await extractWithClaude(base64, mimeType)
-    return { text, provider: 'Claude' }
-  } catch (error: any) {
-    console.log(`Claude 실패: ${error.message?.substring(0, 50)}...`)
+  if (!ocrResult) {
+    try {
+      const text = await extractWithClaude(base64, mimeType)
+      ocrResult = { text, provider: 'Claude' }
+    } catch (error: any) {
+      console.log(`Claude 실패: ${error.message?.substring(0, 50)}...`)
+    }
   }
 
-  throw new Error('모든 OCR 서비스가 실패했습니다.')
+  if (!ocrResult) {
+    throw new Error('모든 OCR 서비스가 실패했습니다.')
+  }
+
+  // 4. 검증 단계 (옵션)
+  if (verify) {
+    console.log(`[OCR] ${ocrResult.provider}로 추출 완료, 검증 시작...`)
+    const verifiedText = await verifyOCRWithImage(
+      ocrResult.text,
+      base64,
+      mimeType,
+      ocrResult.provider
+    )
+    return {
+      text: verifiedText,
+      provider: ocrResult.provider,
+      verified: true
+    }
+  }
+
+  return { ...ocrResult, verified: false }
 }
 
 // ============ 메타데이터 추출 ============
@@ -209,7 +434,8 @@ export async function performOCR(
 export async function extractMetadata(articleText: string): Promise<ExtractedArticle> {
   console.log(`[extractMetadata] 시작 - 텍스트 길이: ${articleText?.length || 0}`)
   try {
-    const response = await getAnthropic().messages.create({
+    const client = await getAnthropic()
+    const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       messages: [
@@ -464,7 +690,8 @@ function isQuotaError(error: any): boolean {
  */
 export async function createEmbedding(text: string): Promise<number[]> {
   try {
-    const response = await getOpenAI().embeddings.create({
+    const client = await getOpenAI()
+    const response = await client.embeddings.create({
       model: 'text-embedding-3-small',
       input: text,
       dimensions: 1536
@@ -512,7 +739,8 @@ export async function createBatchEmbeddings(texts: string[]): Promise<number[][]
   console.log(`[createBatchEmbeddings] 유효한 텍스트 수: ${validTexts.length}`)
 
   try {
-    const response = await getOpenAI().embeddings.create({
+    const client = await getOpenAI()
+    const response = await client.embeddings.create({
       model: 'text-embedding-3-small',
       input: validTexts,
       dimensions: 1536
@@ -769,4 +997,223 @@ export async function processImageToArticles(
   }
 
   return { articles: articleCount, chunks: chunkCount }
+}
+
+// ============ 개선된 OCR 통합 (고급 분석 모듈 사용) ============
+
+import { analyzeNewsPage, checkArticleContinuity, mergeConnectedArticles, type PageAnalysis, type ArticleStructure } from './news-ocr-advanced'
+import { validateOCRResult, correctOCRText } from './ocr-validator'
+
+/**
+ * 개선된 이미지 처리 (다단 레이아웃, 연속 기사, 고유명사 검증 포함)
+ *
+ * @param useAdvancedOCR - true이면 개선된 OCR 사용 (기본값: false, 호환성 유지)
+ */
+export async function processImageToArticlesAdvanced(
+  imageData: Buffer,
+  issueId: number,
+  issueNumber: number,
+  issueDate: string,
+  pageNumber: number,
+  mimeType: string = 'image/jpeg',
+  onProgress?: (step: string) => void,
+  options?: {
+    useAdvancedOCR?: boolean
+    prevPageImage?: Buffer  // 이전 페이지 이미지 (연속 기사 확인용)
+  }
+): Promise<{
+  articles: number
+  chunks: number
+  pageAnalysis?: PageAnalysis
+  warnings: string[]
+  confidence: number
+}> {
+  const useAdvanced = options?.useAdvancedOCR ?? false
+
+  // 기본 OCR 사용 시 기존 함수 호출
+  if (!useAdvanced) {
+    const result = await processImageToArticles(
+      imageData, issueId, issueNumber, issueDate, pageNumber, mimeType, onProgress
+    )
+    return { ...result, warnings: [], confidence: 1.0 }
+  }
+
+  // ============ 개선된 OCR 처리 ============
+
+  let articleCount = 0
+  let chunkCount = 0
+  const warnings: string[] = []
+
+  // 1. 개선된 OCR (레이아웃 분석 + 기사 구조 분석 + 검증)
+  onProgress?.('고급 OCR 분석 중...')
+  const base64Image = imageData.toString('base64')
+  const pageAnalysis = await analyzeNewsPage(base64Image, pageNumber, mimeType)
+
+  warnings.push(...pageAnalysis.warnings)
+  console.log(`[News OCR Advanced] 페이지 ${pageNumber}: ${pageAnalysis.layout.columnCount}단, ${pageAnalysis.articles.length}개 기사, 신뢰도 ${(pageAnalysis.confidence * 100).toFixed(1)}%`)
+
+  // 2. 이전 페이지와 연속성 확인
+  if (options?.prevPageImage) {
+    onProgress?.('연속 기사 확인 중...')
+    const prevBase64 = options.prevPageImage.toString('base64')
+    const continuity = await checkArticleContinuity(prevBase64, base64Image, mimeType)
+
+    if (continuity.isConnected) {
+      console.log(`[News OCR Advanced] 페이지 ${pageNumber - 1}→${pageNumber} 연속 기사 발견`)
+      warnings.push(`페이지 ${pageNumber - 1}에서 계속되는 기사 있음`)
+    }
+  }
+
+  // 3. 검증된 텍스트로 페이지 저장
+  const pageId = await saveNewsPage({
+    issue_id: issueId,
+    page_number: pageNumber,
+    file_hash: generateFileHash(imageData),
+    ocr_text: pageAnalysis.validatedText,
+    ocr_provider: 'advanced',
+    status: 'completed'
+  })
+
+  // 4. 각 기사 처리
+  for (const article of pageAnalysis.articles) {
+    onProgress?.(`기사 처리 중: ${article.title.substring(0, 20)}...`)
+
+    // 고유명사 추가 교정
+    const { correctedText } = await correctOCRText(article.content)
+
+    // 메타데이터 추출
+    const metadata = await extractMetadata(correctedText)
+
+    // 기사 저장 (연속 기사 정보 포함)
+    const articleId = await saveNewsArticle({
+      issue_id: issueId,
+      page_id: pageId,
+      title: article.title || metadata.title,
+      content: correctedText,
+      article_type: article.type || metadata.article_type,
+      speaker: article.author || metadata.speaker,
+      event_name: metadata.event_name,
+      event_date: metadata.event_date,
+      bible_references: metadata.bible_references,
+      keywords: metadata.keywords
+    })
+    articleCount++
+
+    // 청킹
+    onProgress?.('청킹 중...')
+    const chunks = chunkText(correctedText)
+
+    if (chunks.length > 0) {
+      onProgress?.('임베딩 생성 중...')
+      try {
+        const embeddings = await createBatchEmbeddings(chunks)
+
+        const saveCount = Math.min(chunks.length, embeddings.length)
+        for (let i = 0; i < saveCount; i++) {
+          await saveNewsChunk({
+            article_id: articleId,
+            issue_id: issueId,
+            chunk_index: i,
+            chunk_text: chunks[i],
+            issue_number: issueNumber,
+            issue_date: issueDate,
+            page_number: pageNumber,
+            article_title: article.title || metadata.title,
+            article_type: article.type || metadata.article_type,
+            embedding: embeddings[i]
+          })
+          chunkCount++
+        }
+      } catch (embeddingError) {
+        if (embeddingError instanceof EmbeddingQuotaError) {
+          throw embeddingError
+        }
+        console.error(`[processImageToArticlesAdvanced] 임베딩 실패:`, embeddingError)
+        throw embeddingError
+      }
+    }
+  }
+
+  return {
+    articles: articleCount,
+    chunks: chunkCount,
+    pageAnalysis,
+    warnings,
+    confidence: pageAnalysis.confidence
+  }
+}
+
+/**
+ * 다중 페이지 일괄 처리 (연속 기사 자동 병합)
+ */
+export async function processMultiplePagesAdvanced(
+  pageImages: Array<{ data: Buffer; mimeType: string }>,
+  issueId: number,
+  issueNumber: number,
+  issueDate: string,
+  onProgress?: (page: number, step: string) => void
+): Promise<{
+  totalArticles: number
+  totalChunks: number
+  pageResults: Array<{
+    pageNumber: number
+    articles: number
+    chunks: number
+    confidence: number
+    warnings: string[]
+  }>
+  connectedArticles: Array<{ fromPage: number; toPage: number }>
+}> {
+  const pageResults: Array<{
+    pageNumber: number
+    articles: number
+    chunks: number
+    confidence: number
+    warnings: string[]
+  }> = []
+  const connectedArticles: Array<{ fromPage: number; toPage: number }> = []
+
+  let totalArticles = 0
+  let totalChunks = 0
+
+  for (let i = 0; i < pageImages.length; i++) {
+    const pageNumber = i + 1
+
+    const result = await processImageToArticlesAdvanced(
+      pageImages[i].data,
+      issueId,
+      issueNumber,
+      issueDate,
+      pageNumber,
+      pageImages[i].mimeType,
+      (step) => onProgress?.(pageNumber, step),
+      {
+        useAdvancedOCR: true,
+        prevPageImage: i > 0 ? pageImages[i - 1].data : undefined
+      }
+    )
+
+    pageResults.push({
+      pageNumber,
+      articles: result.articles,
+      chunks: result.chunks,
+      confidence: result.confidence,
+      warnings: result.warnings
+    })
+
+    totalArticles += result.articles
+    totalChunks += result.chunks
+
+    // 연속 기사 감지
+    if (result.warnings.some(w => w.includes('계속되는 기사'))) {
+      connectedArticles.push({ fromPage: pageNumber - 1, toPage: pageNumber })
+    }
+  }
+
+  return {
+    totalArticles,
+    totalChunks,
+    pageResults,
+    connectedArticles
+  }
 }

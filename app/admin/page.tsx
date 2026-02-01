@@ -325,6 +325,19 @@ export default function AdminPage() {
               </button>
             ))}
           </div>
+
+          {/* 추가 관리 도구 링크 */}
+          <div className="flex gap-2 mt-3">
+            <Link
+              href="/admin/church-dictionary"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              교회 홈페이지 분석
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -334,7 +347,7 @@ export default function AdminPage() {
         {activeTab === 'api-keys' && (
           <div className="space-y-6 animate-fade-in">
             {/* 등록된 API 키 목록 */}
-            <div className="bg-white/95 rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white/95 rounded-xl shadow-sm border border-amber-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">등록된 API 키</h2>
 
               {apiLoading ? (
@@ -346,7 +359,7 @@ export default function AdminPage() {
                   {apiKeys.map((apiKey) => (
                     <div
                       key={apiKey.id}
-                      className="border border-gray-100 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                      className="border border-amber-100 rounded-lg p-4 flex items-center justify-between hover:bg-amber-50 transition-colors"
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-3">
@@ -389,7 +402,7 @@ export default function AdminPage() {
             </div>
 
             {/* API 키 추가/수정 폼 */}
-            <div className="bg-white/95 rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white/95 rounded-xl shadow-sm border border-amber-100 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 {editing ? 'API 키 수정' : 'API 키 추가'}
               </h2>
@@ -401,7 +414,7 @@ export default function AdminPage() {
                     <select
                       value={formData.provider}
                       onChange={(e) => setFormData({ ...formData, provider: e.target.value as AIProvider })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
                       disabled={!!editing}
                     >
                       <option value="openai">OpenAI</option>
@@ -418,7 +431,7 @@ export default function AdminPage() {
                       type="number"
                       value={formData.priority}
                       onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
                       min="0"
                     />
                   </div>
@@ -430,7 +443,7 @@ export default function AdminPage() {
                     type="password"
                     value={formData.key}
                     onChange={(e) => setFormData({ ...formData, key: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono text-gray-900 bg-white focus:outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-200"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono text-gray-900 bg-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
                     placeholder="sk-..."
                     required
                   />
@@ -474,8 +487,8 @@ export default function AdminPage() {
             </div>
 
             {/* Fallback 설명 */}
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-              <h3 className="font-semibold text-gray-900 mb-2">Fallback 동작 방식</h3>
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <h3 className="font-semibold text-amber-900 mb-2">Fallback 동작 방식</h3>
               <p className="text-sm text-gray-600">
                 우선순위가 낮은 순서대로 시도합니다. 예: OpenAI(0) → Claude(1) → Gemini(2)
                 <br />
@@ -489,12 +502,12 @@ export default function AdminPage() {
         {activeTab === 'bible' && (
           <div className="space-y-6 animate-fade-in">
             {/* 성경 버전 목록 */}
-            <div className="bg-white/95 rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white/95 rounded-xl shadow-sm border border-amber-100 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">성경 버전 목록</h2>
                 <button
                   onClick={fetchBibleVersions}
-                  className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors"
+                  className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-sm font-medium transition-colors"
                 >
                   새로고침
                 </button>
@@ -527,13 +540,13 @@ export default function AdminPage() {
                     return (
                       <div
                         key={version.id}
-                        className="border border-gray-100 rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                        className="border border-amber-100 rounded-lg p-4 hover:bg-amber-50 transition-colors"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-1">
                               <h3 className="font-semibold text-gray-900">{version.name_korean}</h3>
-                              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">
                                 {version.id}
                               </span>
                               <span className="text-xs text-gray-500">{version.language === 'ko' ? '한국어' : '영어'}</span>
@@ -599,8 +612,8 @@ export default function AdminPage() {
             </div>
 
             {/* 크롤링 안내 */}
-            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-              <h3 className="font-semibold text-gray-900 mb-2">성경 크롤링 안내</h3>
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <h3 className="font-semibold text-amber-900 mb-2">성경 크롤링 안내</h3>
               <ul className="text-sm text-gray-600 space-y-1">
                 <li>• <strong>추출</strong>: 웹사이트에서 성경 구절을 크롤링하여 데이터베이스에 저장합니다.</li>
                 <li>• <strong>임베딩</strong>: 저장된 구절에 벡터 임베딩을 생성합니다 (OpenAI API 비용 발생).</li>
@@ -615,12 +628,12 @@ export default function AdminPage() {
         {activeTab === 'data' && (
           <div className="space-y-6 animate-fade-in">
             {/* 현재 데이터 통계 */}
-            <div className="bg-white/95 rounded-xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white/95 rounded-xl shadow-sm border border-amber-100 p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">현재 데이터 현황</h2>
                 <button
                   onClick={fetchDataStats}
-                  className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium transition-colors"
+                  className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 text-sm font-medium transition-colors"
                 >
                   새로고침
                 </button>
@@ -732,7 +745,7 @@ export default function AdminPage() {
             </div>
 
             {/* 데이터 초기화 */}
-            <div className="bg-white/95 rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="bg-white/95 rounded-xl shadow-sm border border-amber-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">데이터 초기화</h2>
               <p className="text-sm text-gray-600 mb-4">
                 주의: 삭제된 데이터는 복구할 수 없습니다. 신중하게 진행하세요.
@@ -742,7 +755,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => handleDataReset('news')}
-                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
                 >
                   <h3 className="font-semibold text-gray-800 mb-1">뉴스 데이터 삭제</h3>
                   <p className="text-sm text-gray-500">호수, 기사, 청크, 임베딩 모두 삭제</p>
@@ -751,7 +764,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => handleDataReset('bulletin')}
-                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
                 >
                   <h3 className="font-semibold text-gray-800 mb-1">주보 데이터 삭제</h3>
                   <p className="text-sm text-gray-500">주보, 섹션, 청크 모두 삭제</p>
@@ -760,7 +773,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => handleDataReset('bible')}
-                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
                 >
                   <h3 className="font-semibold text-gray-800 mb-1">성경 임베딩 삭제</h3>
                   <p className="text-sm text-gray-500">구절 텍스트는 유지, 임베딩만 삭제</p>
@@ -769,7 +782,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={() => handleDataReset('sermons')}
-                  className="p-4 border-2 border-gray-200 rounded-lg text-left hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
                 >
                   <h3 className="font-semibold text-gray-800 mb-1">설교 데이터 삭제</h3>
                   <p className="text-sm text-gray-500">설교 및 청크 모두 삭제</p>

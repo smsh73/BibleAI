@@ -17,6 +17,16 @@ interface VerseReference {
   content: string
 }
 
+interface SermonReference {
+  videoId: string
+  videoTitle: string
+  videoUrl: string
+  speaker?: string
+  uploadDate?: string
+  startTime?: number
+  endTime?: number
+}
+
 interface NewsSource {
   articleId?: number
   issueDate: string
@@ -323,6 +333,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [showEmotionSelector, setShowEmotionSelector] = useState(true)
   const [verseReferences, setVerseReferences] = useState<VerseReference[]>([])
+  const [sermonReferences, setSermonReferences] = useState<SermonReference[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // 미디어 생성 상태 (위로 이미지 + 팟캐스트 오디오)
@@ -452,6 +463,8 @@ export default function Home() {
 
               if (data.type === 'verses') {
                 setVerseReferences(data.verses)
+              } else if (data.type === 'sermons') {
+                setSermonReferences(data.sermons)
               } else if (data.content) {
                 assistantMessage += data.content
 
@@ -645,6 +658,111 @@ export default function Home() {
       ])
     } finally {
       setNewsLoading(false)
+    }
+  }
+
+  // 위로 이미지 다운로드 함수
+  const handleDownloadImage = async () => {
+    if (!comfortImage) return
+
+    try {
+      // 캔버스 생성
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      const img = new window.Image()
+      img.crossOrigin = 'anonymous'
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = reject
+        img.src = comfortImage
+      })
+
+      // 캔버스 크기 설정
+      canvas.width = img.width
+      canvas.height = img.height
+
+      // 이미지 그리기
+      ctx.drawImage(img, 0, 0)
+
+      // 구절 오버레이 그리기 (있는 경우)
+      if (verseReferences.length > 0) {
+        const verse = verseReferences[0]
+        const padding = canvas.width * 0.04
+        const overlayHeight = canvas.height * 0.18
+
+        // 그라데이션 오버레이
+        const gradient = ctx.createLinearGradient(0, canvas.height - overlayHeight, 0, canvas.height)
+        gradient.addColorStop(0, 'rgba(0, 0, 0, 0)')
+        gradient.addColorStop(0.3, 'rgba(0, 0, 0, 0.4)')
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)')
+        ctx.fillStyle = gradient
+        ctx.fillRect(0, canvas.height - overlayHeight, canvas.width, overlayHeight)
+
+        // 구절 내용 텍스트
+        const verseContent = verse.content.length > 80
+          ? verse.content.substring(0, 80) + '...'
+          : verse.content
+        const fontSize = Math.max(14, canvas.width * 0.025)
+
+        ctx.font = `${fontSize}px serif`
+        ctx.fillStyle = 'white'
+        ctx.textAlign = 'center'
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)'
+        ctx.shadowBlur = 4
+
+        // 텍스트 줄바꿈 처리
+        const maxWidth = canvas.width - padding * 2
+        const words = `"${verseContent}"`.split(' ')
+        const lines: string[] = []
+        let currentLine = ''
+
+        for (const word of words) {
+          const testLine = currentLine + (currentLine ? ' ' : '') + word
+          const metrics = ctx.measureText(testLine)
+          if (metrics.width > maxWidth && currentLine) {
+            lines.push(currentLine)
+            currentLine = word
+          } else {
+            currentLine = testLine
+          }
+        }
+        if (currentLine) lines.push(currentLine)
+
+        // 구절 텍스트 그리기
+        const lineHeight = fontSize * 1.4
+        const totalTextHeight = lines.length * lineHeight + fontSize * 0.8
+        let y = canvas.height - padding - totalTextHeight
+
+        for (const line of lines) {
+          ctx.fillText(line, canvas.width / 2, y)
+          y += lineHeight
+        }
+
+        // 참조 텍스트
+        ctx.font = `${fontSize * 0.75}px sans-serif`
+        ctx.fillStyle = '#fcd34d' // amber-200
+        ctx.fillText(`— ${verse.reference}`, canvas.width / 2, y + fontSize * 0.3)
+      }
+
+      // 다운로드
+      const link = document.createElement('a')
+      const dateStr = new Date().toISOString().split('T')[0]
+      const reference = verseReferences.length > 0
+        ? verseReferences[0].reference.replace(/[:\s]/g, '-')
+        : 'comfort'
+      link.download = `위로이미지-${reference}-${dateStr}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    } catch (error) {
+      console.error('이미지 다운로드 실패:', error)
+      // Fallback: 원본 이미지 직접 다운로드
+      const link = document.createElement('a')
+      link.download = `위로이미지-${new Date().toISOString().split('T')[0]}.png`
+      link.href = comfortImage
+      link.click()
     }
   }
 
@@ -1037,6 +1155,85 @@ export default function Home() {
                   </div>
                 )}
 
+                {/* 관련 설교 영상 참조 - 답변 완료 후에만 표시 */}
+                {!loading && sermonReferences.length > 0 && messages.length > 0 && (
+                  <div className="animate-fade-in mt-4">
+                    {/* 헤더 */}
+                    <div className="flex items-center justify-between mb-3 px-1">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+                        </svg>
+                        <span className="text-sm font-medium text-red-800">관련 설교</span>
+                        <span className="text-xs text-red-500">({sermonReferences.length}개)</span>
+                      </div>
+                      <a
+                        href="/youtube"
+                        className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                        전체 설교 보기
+                      </a>
+                    </div>
+
+                    {/* 설교 목록 */}
+                    <div className="space-y-2">
+                      {sermonReferences.map((sermon, idx) => (
+                        <a
+                          key={idx}
+                          href={sermon.startTime
+                            ? `${sermon.videoUrl}&t=${sermon.startTime}`
+                            : sermon.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block bg-white/90 rounded-xl p-3 hover:bg-red-50 hover:shadow-md transition-all cursor-pointer group border border-red-100"
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* 썸네일 */}
+                            <div className="flex-shrink-0 w-24 h-14 bg-gray-200 rounded-lg overflow-hidden relative">
+                              <img
+                                src={`https://img.youtube.com/vi/${sermon.videoId}/mqdefault.jpg`}
+                                alt={sermon.videoTitle}
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/20 transition-colors">
+                                <svg className="w-8 h-8 text-white/90" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M8 5v14l11-7z"/>
+                                </svg>
+                              </div>
+                              {sermon.startTime && (
+                                <span className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 rounded">
+                                  {Math.floor(sermon.startTime / 60)}:{(sermon.startTime % 60).toString().padStart(2, '0')}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-gray-900 text-sm group-hover:text-red-700 transition-colors line-clamp-2">
+                                  {sermon.videoTitle}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                {sermon.speaker && (
+                                  <span className="text-red-600 font-medium">{sermon.speaker}</span>
+                                )}
+                                {sermon.uploadDate && (
+                                  <span>{sermon.uploadDate}</span>
+                                )}
+                              </div>
+                            </div>
+                            <svg className="w-4 h-4 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* 위로 미디어 섹션 (이미지 + 오디오) */}
                 {!loading && messages.length > 0 && (comfortImage || podcastAudio || mediaLoading.image || mediaLoading.audio) && (
                   <div className="animate-fade-in mt-6 space-y-4">
@@ -1061,11 +1258,36 @@ export default function Home() {
                             </div>
                           </div>
                         ) : comfortImage ? (
-                          <img
-                            src={comfortImage}
-                            alt="Comfort image"
-                            className="w-full max-w-md mx-auto rounded-lg shadow-md"
-                          />
+                          <div className="relative w-full max-w-md mx-auto">
+                            <img
+                              src={comfortImage}
+                              alt="Comfort image"
+                              className="w-full rounded-lg shadow-md"
+                            />
+                            {/* 구절 오버레이 */}
+                            {verseReferences.length > 0 && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent p-4 rounded-b-lg">
+                                <p className="text-white text-center font-serif text-sm leading-relaxed drop-shadow-lg">
+                                  "{verseReferences[0].content.length > 80
+                                    ? verseReferences[0].content.substring(0, 80) + '...'
+                                    : verseReferences[0].content}"
+                                </p>
+                                <p className="text-amber-200 text-center text-xs mt-1 font-medium drop-shadow">
+                                  — {verseReferences[0].reference}
+                                </p>
+                              </div>
+                            )}
+                            {/* 다운로드 버튼 */}
+                            <button
+                              onClick={handleDownloadImage}
+                              className="absolute top-2 right-2 p-2 bg-white/90 hover:bg-white rounded-full shadow-md transition-all hover:scale-105"
+                              title={language === 'en' ? 'Download image' : '이미지 다운로드'}
+                            >
+                              <svg className="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </button>
+                          </div>
                         ) : null}
                       </div>
                     )}

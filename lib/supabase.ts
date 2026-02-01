@@ -997,6 +997,8 @@ export interface SermonSearchResult {
   content: string
   start_time?: number
   end_time?: number
+  speaker?: string
+  upload_date?: string
   similarity?: number
   keyword_rank?: number
   combined_score?: number

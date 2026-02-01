@@ -120,6 +120,7 @@ VALUES
 ON CONFLICT (reference, theme) DO NOTHING;
 
 -- 6. 그래프 탐색 함수: 연결된 구절 찾기 (BFS)
+-- depth 우선 정렬: 가까운 연결(depth 1)이 먼저 반환됨
 CREATE OR REPLACE FUNCTION get_connected_verses(
   start_reference VARCHAR(50),
   max_depth INT DEFAULT 2,
@@ -168,16 +169,22 @@ WITH RECURSIVE verse_graph AS (
         ELSE vr.source_reference
       END = ANY(vg.path)
     )
+),
+-- 서브쿼리: 각 참조에 대해 가장 짧은 depth만 유지
+deduplicated AS (
+  SELECT DISTINCT ON (reference)
+    reference,
+    depth,
+    relation_type,
+    relation_description,
+    path
+  FROM verse_graph
+  WHERE reference != start_reference
+  ORDER BY reference, depth
 )
-SELECT DISTINCT ON (reference)
-  reference,
-  depth,
-  relation_type,
-  relation_description,
-  path
-FROM verse_graph
-WHERE reference != start_reference
-ORDER BY reference, depth
+-- 최종 결과: depth 우선 정렬 후 LIMIT 적용
+SELECT * FROM deduplicated
+ORDER BY depth, reference
 LIMIT max_results;
 $$ LANGUAGE SQL;
 

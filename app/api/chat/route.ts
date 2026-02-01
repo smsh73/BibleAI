@@ -47,6 +47,17 @@ export async function POST(req: NextRequest) {
     // 간단 응답 모드인 경우 검색 건너뛰기
     let relevantVerses: any[] = []
     let sermonContent: string | null = null
+    let sermonResults: Array<{
+      video_id: string
+      video_title: string
+      video_url?: string
+      content: string
+      start_time?: number
+      end_time?: number
+      speaker?: string
+      upload_date?: string
+      combined_score?: number
+    }> = []
     let newsContent: string | null = null
     let bulletinContent: string | null = null
     let christianWisdom: string | null = null
@@ -63,27 +74,31 @@ export async function POST(req: NextRequest) {
       )
 
       // 2. 설교 내용 검색 (YouTube 설교에서 추출한 벡터)
-      let sermonResults: Array<{
-        video_id: string
-        video_title: string
-        video_url?: string
-        content: string
-        start_time?: number
-        end_time?: number
-        combined_score?: number
-      }> = []
       try {
         sermonResults = await hybridSearchSermons(lastUserMessage.content, { limit: 3 })
         if (sermonResults && sermonResults.length > 0) {
           sermonContent = sermonResults
             .map((s, i) => {
+              // 날짜 포맷팅
+              const dateInfo = s.upload_date
+                ? new Date(s.upload_date).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
+                : ''
+              // 시간 정보
               const timeInfo = s.start_time
                 ? ` (${formatTime(s.start_time)} ~ ${formatTime(s.end_time || s.start_time)})`
                 : ''
-              return `[설교 ${i + 1}] ${s.video_title}${timeInfo}:\n"${s.content.substring(0, 300)}..."`
+              // 설교자 정보
+              const speakerInfo = s.speaker ? ` - ${s.speaker}` : ''
+              // 메타정보 조합
+              const metaInfo = [dateInfo, speakerInfo].filter(Boolean).join('')
+              const headerInfo = metaInfo ? ` [${metaInfo}]` : ''
+
+              return `[설교 ${i + 1}] ${s.video_title}${headerInfo}${timeInfo}:\n"${s.content.substring(0, 300)}..."`
             })
             .join('\n\n')
           console.log('[Chat API] 설교 내용 발견:', sermonResults.length, '개')
+          console.log('[Chat API] sermonContent 길이:', sermonContent?.length || 0, '자')
+          console.log('[Chat API] sermonContent 샘플:', sermonContent?.substring(0, 200))
         }
       } catch (e) {
         console.warn('[Chat API] 설교 검색 실패:', e)
@@ -171,6 +186,20 @@ export async function POST(req: NextRequest) {
       relationsText: verseRelations.explanationText
     }
 
+    // 설교 참조 정보 준비
+    const sermonsInfo = {
+      type: 'sermons',
+      sermons: sermonResults.map(s => ({
+        videoId: s.video_id,
+        videoTitle: s.video_title,
+        videoUrl: s.video_url || `https://www.youtube.com/watch?v=${s.video_id}`,
+        speaker: s.speaker,
+        uploadDate: s.upload_date,
+        startTime: s.start_time,
+        endTime: s.end_time
+      }))
+    }
+
     const stream = new ReadableStream({
       async start(controller) {
         try {
@@ -180,6 +209,14 @@ export async function POST(req: NextRequest) {
               encoder.encode(`data: ${JSON.stringify(versesInfo)}\n\n`)
             )
             console.log('[Chat API] 구절 정보 전송:', versesInfo.verses.length, '개')
+          }
+
+          // 설교 참조 정보 전송
+          if (sermonsInfo.sermons.length > 0) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(sermonsInfo)}\n\n`)
+            )
+            console.log('[Chat API] 설교 정보 전송:', sermonsInfo.sermons.length, '개')
           }
 
           for await (const chunk of generateStreamingResponse(messages, context)) {

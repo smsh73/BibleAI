@@ -522,11 +522,13 @@ async function releaseTaskLock(): Promise<void> {
 async function syncVectorIndex(): Promise<void> {
   try {
     // news_chunks 테이블의 벡터 인덱스 갱신
-    await supabase.rpc('refresh_news_vector_index').catch(() => {
+    const { error } = await supabase.rpc('refresh_news_vector_index')
+    if (error) {
       // RPC가 없으면 기본 동작 (INSERT 후 자동 인덱싱)
       console.log('[news/process] refresh_news_vector_index RPC 없음, 기본 동기화 사용')
-    })
-    console.log('[news/process] 벡터 인덱스 동기화 완료')
+    } else {
+      console.log('[news/process] 벡터 인덱스 동기화 완료')
+    }
   } catch (error) {
     console.warn('[news/process] 벡터 인덱스 동기화 실패 (계속 진행):', error)
   }

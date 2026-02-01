@@ -82,6 +82,7 @@ CREATE TRIGGER sermon_updated_at_trigger
   FOR EACH ROW EXECUTE FUNCTION update_sermon_updated_at();
 
 -- 7. Hybrid Search RPC 함수 개선 (설교용)
+-- speaker, upload_date 포함하여 설교 메타데이터 제공
 CREATE OR REPLACE FUNCTION hybrid_search_sermons(
   query_embedding vector(1536),
   query_text text,
@@ -98,6 +99,8 @@ RETURNS TABLE (
   content text,
   start_time numeric,
   end_time numeric,
+  speaker text,
+  upload_date date,
   similarity float,
   keyword_rank float,
   combined_score float
@@ -138,11 +141,14 @@ BEGIN
     vr.content,
     vr.start_time,
     vr.end_time,
+    s.speaker,
+    s.upload_date,
     vr.similarity::float,
     COALESCE(kr.keyword_rank, 0)::float AS keyword_rank,
     (vr.similarity * vector_weight + COALESCE(kr.keyword_rank, 0) * keyword_weight)::float AS combined_score
   FROM vector_results vr
   LEFT JOIN keyword_results kr ON vr.id = kr.id
+  LEFT JOIN sermons s ON vr.video_id = s.video_id
   ORDER BY combined_score DESC
   LIMIT match_count;
 END;

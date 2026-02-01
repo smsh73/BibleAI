@@ -4,11 +4,14 @@
  * POST: 스캔 및 처리 시작
  * - 증분 스캔: DB 캐시 우선 사용, 신규만 웹 스캔
  * - Graceful stop: 현재 항목 완료 후 중지
+ * - 개선된 OCR: 다중 모델 교차 검증, 고유명사 검증
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
+import { analyzeBulletinPage } from '@/lib/bulletin-ocr'
+import { validateOCRResult } from '@/lib/ocr-validator'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +19,9 @@ const supabase = createClient(
 )
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+// 개선된 OCR 사용 여부 (환경변수로 제어, 기본값: true)
+const USE_ADVANCED_OCR = process.env.USE_ADVANCED_BULLETIN_OCR !== 'false'
 
 const BASE_URL = 'https://www.anyangjeil.org'
 const BOARD_ID = 65
@@ -167,8 +173,8 @@ async function fetchBulletinImages(boardId: number): Promise<string[]> {
   return imageUrls
 }
 
-// OCR 수행
-async function performOCR(imageUrl: string): Promise<string> {
+// OCR 수행 (기본)
+async function performBasicOCR(imageUrl: string): Promise<string> {
   try {
     const base64Image = await downloadImageAsBase64(imageUrl)
     if (!base64Image) return ''
@@ -191,6 +197,44 @@ async function performOCR(imageUrl: string): Promise<string> {
   } catch (error: any) {
     console.error('OCR 오류:', error.message)
     return ''
+  }
+}
+
+// 개선된 OCR 수행 (다중 모델 교차 검증 + 고유명사 검증)
+async function performAdvancedOCR(
+  imageUrl: string,
+  pageNumber: number
+): Promise<{ text: string; confidence: number; warnings: string[] }> {
+  try {
+    // data:... 형식이 아닌 순수 base64만 추출
+    const fullBase64 = await downloadImageAsBase64(imageUrl)
+    if (!fullBase64) return { text: '', confidence: 0, warnings: ['이미지 다운로드 실패'] }
+
+    // "data:image/jpeg;base64," 부분 제거
+    const base64Match = fullBase64.match(/^data:([^;]+);base64,(.+)$/)
+    if (!base64Match) return { text: '', confidence: 0, warnings: ['base64 파싱 실패'] }
+
+    const mimeType = base64Match[1]
+    const base64Data = base64Match[2]
+
+    // 개선된 OCR 모듈 사용
+    const analysis = await analyzeBulletinPage(base64Data, pageNumber, mimeType)
+
+    return {
+      text: analysis.validatedText,
+      confidence: analysis.overallConfidence,
+      warnings: analysis.warnings
+    }
+  } catch (error: any) {
+    console.error('[Bulletin OCR] 개선된 OCR 실패, 기본 OCR로 폴백:', error.message)
+    // 폴백: 기본 OCR 사용
+    const basicText = await performBasicOCR(imageUrl)
+    const validation = await validateOCRResult(basicText)
+    return {
+      text: validation.correctedText,
+      confidence: validation.confidence,
+      warnings: [...validation.warnings, '폴백: 기본 OCR 사용']
+    }
   }
 }
 
@@ -314,11 +358,13 @@ async function syncVectorIndex(): Promise<void> {
   try {
     // bulletin_chunks 테이블의 벡터 인덱스 갱신
     // ANALYZE로 통계 정보 업데이트 (검색 최적화)
-    await supabase.rpc('refresh_bulletin_vector_index').catch(() => {
+    const { error } = await supabase.rpc('refresh_bulletin_vector_index')
+    if (error) {
       // RPC가 없으면 직접 ANALYZE 실행 시도
       console.log('[bulletin/process] refresh_bulletin_vector_index RPC 없음, 기본 동기화 사용')
-    })
-    console.log('[bulletin/process] 벡터 인덱스 동기화 완료')
+    } else {
+      console.log('[bulletin/process] 벡터 인덱스 동기화 완료')
+    }
   } catch (error) {
     console.warn('[bulletin/process] 벡터 인덱스 동기화 실패 (계속 진행):', error)
   }
@@ -485,9 +531,28 @@ export async function POST(req: NextRequest) {
             const imageUrls = await fetchBulletinImages(bulletin.board_id)
 
             let totalChunks = 0
+            let totalWarnings: string[] = []
 
             for (let i = 0; i < imageUrls.length; i++) {
-              const ocrText = await performOCR(imageUrls[i])
+              let ocrText: string
+              let pageConfidence = 0
+              let pageWarnings: string[] = []
+
+              // 개선된 OCR 사용 (환경변수로 제어, 기본값: true)
+              if (USE_ADVANCED_OCR) {
+                const result = await performAdvancedOCR(imageUrls[i], i + 1)
+                ocrText = result.text
+                pageConfidence = result.confidence
+                pageWarnings = result.warnings
+
+                if (pageWarnings.length > 0) {
+                  console.log(`[bulletin/process] 페이지 ${i + 1} 경고:`, pageWarnings.join(', '))
+                  totalWarnings.push(...pageWarnings)
+                }
+                console.log(`[bulletin/process] 페이지 ${i + 1} 신뢰도: ${(pageConfidence * 100).toFixed(1)}%`)
+              } else {
+                ocrText = await performBasicOCR(imageUrls[i])
+              }
 
               if (ocrText) {
                 const chunks = splitIntoChunks(

@@ -7,6 +7,15 @@
 
 import { useState, useEffect } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
+import dynamic from 'next/dynamic'
+
+// 그래프 시각화 컴포넌트 (SSR 비활성화)
+const VerseGraphVisualization = dynamic(
+  () => import('@/components/VerseGraphVisualization'),
+  { ssr: false, loading: () => <div className="h-[500px] flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
+)
+
+type ViewMode = 'card' | 'graph'
 
 interface VerseNode {
   reference: string
@@ -169,6 +178,9 @@ export default function VerseMapPage() {
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null)
   const [selectedChapter, setSelectedChapter] = useState<number | null>(null)
   const [showBibleMap, setShowBibleMap] = useState(true)
+
+  // 뷰 모드 (카드 뷰 vs 그래프 뷰)
+  const [viewMode, setViewMode] = useState<ViewMode>('card')
 
   // URL 파라미터에서 reference 읽기
   useEffect(() => {
@@ -557,11 +569,11 @@ export default function VerseMapPage() {
           </div>
         )}
 
-        {/* 메인 콘텐츠 - 카드 기반 연쇄 뷰 */}
+        {/* 메인 콘텐츠 - 카드 기반 연쇄 뷰 또는 그래프 뷰 */}
         {graph && centerNode && !loading && (
           <div className="space-y-4">
-            {/* 지도로 돌아가기 버튼 */}
-            <div className="flex items-center gap-3 mb-4">
+            {/* 상단 네비게이션 및 뷰 모드 토글 */}
+            <div className="flex items-center justify-between mb-4">
               <button
                 onClick={handleBackToMap}
                 className="flex items-center gap-1 text-sm text-amber-600 hover:text-amber-800 transition-colors"
@@ -571,6 +583,36 @@ export default function VerseMapPage() {
                 </svg>
                 {language === 'en' ? 'Back to Bible Map' : '성경 지도로'}
               </button>
+
+              {/* 뷰 모드 토글 */}
+              <div className="flex items-center gap-1 bg-amber-100 rounded-full p-1">
+                <button
+                  onClick={() => setViewMode('card')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    viewMode === 'card'
+                      ? 'bg-white text-amber-800 shadow-sm'
+                      : 'text-amber-600 hover:text-amber-800'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  {language === 'en' ? 'Cards' : '카드'}
+                </button>
+                <button
+                  onClick={() => setViewMode('graph')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    viewMode === 'graph'
+                      ? 'bg-white text-amber-800 shadow-sm'
+                      : 'text-amber-600 hover:text-amber-800'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  {language === 'en' ? 'Graph' : '그래프'}
+                </button>
+              </div>
             </div>
 
             {/* 타이틀 */}
@@ -581,12 +623,26 @@ export default function VerseMapPage() {
                   : `"${centerNode.reference}" 에서 시작하는 말씀의 연결`}
               </h2>
               <p className="text-sm text-amber-600 mt-1">
-                {language === 'en'
-                  ? 'Click a card to explore more connections'
-                  : '카드를 클릭하면 해당 구절의 연결을 더 탐색할 수 있습니다'}
+                {viewMode === 'graph'
+                  ? (language === 'en' ? 'Interactive network visualization of verse connections' : '성경 구절 연결의 네트워크 시각화')
+                  : (language === 'en' ? 'Click a card to explore more connections' : '카드를 클릭하면 해당 구절의 연결을 더 탐색할 수 있습니다')}
               </p>
             </div>
 
+            {/* 그래프 뷰 */}
+            {viewMode === 'graph' && (
+              <VerseGraphVisualization
+                nodes={graph.nodes}
+                edges={graph.edges}
+                centerReference={centerNode.reference}
+                onNodeClick={handleVerseClick}
+                height={550}
+              />
+            )}
+
+            {/* 카드 뷰 */}
+            {viewMode === 'card' && (
+              <>
             {/* 중심 구절 카드 */}
             <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-1 shadow-lg">
               <div className="bg-white rounded-xl p-5">
@@ -778,6 +834,8 @@ export default function VerseMapPage() {
                 <span>{graph.edges.length}개 연결</span>
               </div>
             </div>
+              </>
+            )}
           </div>
         )}
       </main>

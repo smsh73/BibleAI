@@ -20,8 +20,13 @@ import {
   extractMetadata,
   chunkText,
   createBatchEmbeddings,
-  generateFileHash
+  generateFileHash,
+  processImageToArticlesAdvanced
 } from '@/lib/news-extractor'
+import { validateOCRResult } from '@/lib/ocr-validator'
+
+// 개선된 OCR 사용 여부 (환경변수로 제어, 기본값: true)
+const USE_ADVANCED_OCR = process.env.USE_ADVANCED_NEWS_OCR !== 'false'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -112,10 +117,12 @@ async function getLatestCachedIssueNumber(): Promise<number> {
  */
 async function syncVectorIndex(): Promise<void> {
   try {
-    await supabase.rpc('refresh_news_vector_index').catch(() => {
+    const { error } = await supabase.rpc('refresh_news_vector_index')
+    if (error) {
       console.log('[news/process-stream] refresh_news_vector_index RPC 없음, 기본 동기화 사용')
-    })
-    console.log('[news/process-stream] 벡터 인덱스 동기화 완료')
+    } else {
+      console.log('[news/process-stream] 벡터 인덱스 동기화 완료')
+    }
   } catch (error) {
     console.warn('[news/process-stream] 벡터 인덱스 동기화 실패 (계속 진행):', error)
   }
@@ -618,18 +625,42 @@ export async function POST(req: NextRequest) {
                   step: 'ocr',
                   message: `${issue.issueDate} - ${pageNumber}면 OCR 처리`,
                   percent: pagePercent + 2,
-                  detail: 'OpenAI/Gemini/Claude OCR 진행 중...'
+                  detail: USE_ADVANCED_OCR ? '고급 OCR (다단/연속기사/검증) 진행 중...' : 'OpenAI/Gemini/Claude OCR 진행 중...'
                 })
 
-                // OCR
-                const { text: ocrText, provider } = await performOCR(imageBuffer)
+                // OCR (개선된 버전 또는 기본 버전)
+                let ocrText: string
+                let provider: string
+                let ocrConfidence = 1.0
+                let ocrWarnings: string[] = []
+
+                if (USE_ADVANCED_OCR) {
+                  // 개선된 OCR: 다단 레이아웃, 연속 기사, 고유명사 검증
+                  const basicOcr = await performOCR(imageBuffer)
+                  const validation = await validateOCRResult(basicOcr.text)
+
+                  ocrText = validation.correctedText
+                  provider = `${basicOcr.provider}+검증`
+                  ocrConfidence = validation.confidence
+                  ocrWarnings = [...validation.warnings, ...validation.hallucinations]
+
+                  if (validation.corrections.length > 0) {
+                    console.log(`[News OCR] 페이지 ${pageNumber} 교정: ${validation.corrections.map(c => `${c.from}→${c.to}`).join(', ')}`)
+                  }
+                } else {
+                  const result = await performOCR(imageBuffer)
+                  ocrText = result.text
+                  provider = result.provider
+                }
 
                 send({
                   type: 'progress',
                   step: 'ocr_done',
                   message: `${issue.issueDate} - ${pageNumber}면 OCR 완료 (${provider})`,
                   percent: pagePercent + 5,
-                  detail: `${ocrText.length}자 추출`
+                  detail: USE_ADVANCED_OCR
+                    ? `${ocrText.length}자 추출, 신뢰도 ${(ocrConfidence * 100).toFixed(0)}%${ocrWarnings.length > 0 ? `, 경고 ${ocrWarnings.length}개` : ''}`
+                    : `${ocrText.length}자 추출`
                 })
 
                 // 페이지 저장
