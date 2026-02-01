@@ -11,10 +11,66 @@ CREATE TABLE IF NOT EXISTS churches (
   description TEXT,                            -- 설명
   denomination VARCHAR(100),                   -- 교단 (대한예수교장로회 등)
   address TEXT,                                -- 주소
+  postal_code VARCHAR(10),                     -- 우편번호
   phone VARCHAR(50),                           -- 전화번호
+  fax VARCHAR(50),                             -- 팩스
+  email VARCHAR(100),                          -- 대표 이메일
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 교회 연락처 테이블 (복수의 연락처 저장)
+CREATE TABLE IF NOT EXISTS church_contacts (
+  id SERIAL PRIMARY KEY,
+  church_id INTEGER REFERENCES churches(id) ON DELETE CASCADE,
+  contact_type VARCHAR(50) NOT NULL,           -- phone, email, fax
+  contact_value VARCHAR(200) NOT NULL,         -- 연락처 값
+  label VARCHAR(100),                          -- 라벨 (대표, 교육관, 선교부 등)
+  is_primary BOOLEAN DEFAULT false,            -- 주요 연락처 여부
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 교회 소셜 미디어 테이블
+CREATE TABLE IF NOT EXISTS church_social_media (
+  id SERIAL PRIMARY KEY,
+  church_id INTEGER REFERENCES churches(id) ON DELETE CASCADE,
+  platform VARCHAR(50) NOT NULL,               -- youtube, facebook, instagram, kakao, naver_blog 등
+  url TEXT NOT NULL,                           -- 링크 URL
+  handle VARCHAR(100),                         -- 계정명/핸들
+  is_verified BOOLEAN DEFAULT false,           -- 검증 여부
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(church_id, platform)
+);
+
+-- 교회 미디어 테이블 (로고, 배너, 이미지 등)
+CREATE TABLE IF NOT EXISTS church_media (
+  id SERIAL PRIMARY KEY,
+  church_id INTEGER REFERENCES churches(id) ON DELETE CASCADE,
+  media_type VARCHAR(50) NOT NULL,             -- logo, banner, gallery, video, document
+  url TEXT NOT NULL,                           -- 미디어 URL
+  title VARCHAR(200),                          -- 제목
+  description TEXT,                            -- 설명
+  file_type VARCHAR(20),                       -- jpg, png, mp4, pdf, hwp 등
+  platform VARCHAR(50),                        -- youtube, vimeo 등 (비디오의 경우)
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 교회 예배 시간 테이블
+CREATE TABLE IF NOT EXISTS church_worship_times (
+  id SERIAL PRIMARY KEY,
+  church_id INTEGER REFERENCES churches(id) ON DELETE CASCADE,
+  name VARCHAR(100) NOT NULL,                  -- 예배명 (주일예배, 수요예배 등)
+  day_of_week VARCHAR(20),                     -- 요일
+  start_time TIME,                             -- 시작 시간
+  time_display VARCHAR(100),                   -- 시간 표시 문자열
+  location VARCHAR(200),                       -- 장소
+  target_audience VARCHAR(100),                -- 대상 (청년, 장년, 어린이 등)
+  notes TEXT,                                  -- 참고사항
+  is_online BOOLEAN DEFAULT false,             -- 온라인 예배 여부
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- 홈페이지 구조 테이블 (사이트맵)
@@ -152,6 +208,15 @@ CREATE INDEX IF NOT EXISTS idx_church_dictionary_term ON church_dictionary(term)
 CREATE INDEX IF NOT EXISTS idx_church_taxonomy_church_id ON church_taxonomy(church_id);
 CREATE INDEX IF NOT EXISTS idx_church_taxonomy_type ON church_taxonomy(taxonomy_type);
 CREATE INDEX IF NOT EXISTS idx_church_crawl_logs_church_id ON church_crawl_logs(church_id);
+
+-- 확장 테이블 인덱스
+CREATE INDEX IF NOT EXISTS idx_church_contacts_church_id ON church_contacts(church_id);
+CREATE INDEX IF NOT EXISTS idx_church_contacts_type ON church_contacts(contact_type);
+CREATE INDEX IF NOT EXISTS idx_church_social_media_church_id ON church_social_media(church_id);
+CREATE INDEX IF NOT EXISTS idx_church_social_media_platform ON church_social_media(platform);
+CREATE INDEX IF NOT EXISTS idx_church_media_church_id ON church_media(church_id);
+CREATE INDEX IF NOT EXISTS idx_church_media_type ON church_media(media_type);
+CREATE INDEX IF NOT EXISTS idx_church_worship_times_church_id ON church_worship_times(church_id);
 
 -- 기본 교회 데이터 삽입
 INSERT INTO churches (name, code, homepage_url, denomination) VALUES

@@ -49,12 +49,31 @@ async function getAnthropic(): Promise<Anthropic> {
 export interface PageInfo {
   url: string
   title: string
-  pageType: 'main' | 'menu' | 'submenu' | 'content' | 'board' | 'popup' | 'external'
+  pageType: 'main' | 'menu' | 'submenu' | 'content' | 'board' | 'popup' | 'external' | 'modal'
   depth: number
   parentUrl?: string
   children?: PageInfo[]
-  contentType?: 'static' | 'board' | 'gallery' | 'video' | 'list' | 'form'
+  contentType?: 'static' | 'board' | 'gallery' | 'video' | 'list' | 'form' | 'popup'
   extractedData?: any
+  crawled?: boolean  // 실제로 방문했는지 여부
+  crawlError?: string  // 크롤링 오류 메시지
+}
+
+// 크롤링 진행 상황 추적
+export interface CrawlProgress {
+  totalPages: number
+  crawledPages: number
+  currentUrl: string
+  currentDepth: number
+  errors: string[]
+}
+
+// 팝업/모달 정보
+export interface PopupInfo {
+  url: string
+  title: string
+  triggerType: 'onclick' | 'href' | 'data-url' | 'window.open' | 'layer'
+  triggerElement: string
 }
 
 export interface SiteStructure {
@@ -73,6 +92,11 @@ export interface SiteStructure {
     hasMobileVersion: boolean
     technologies: string[]
   }
+  // 확장된 정보
+  contacts?: ContactInfo
+  socialMedia?: SocialMediaInfo
+  media?: MediaInfo
+  worshipTimes?: WorshipTimeInfo[]
 }
 
 export interface DictionaryEntry {
@@ -84,6 +108,47 @@ export interface DictionaryEntry {
   relatedTerms?: string[]
   metadata?: any
   sourceUrl?: string
+}
+
+// 연락처 정보
+export interface ContactInfo {
+  phones: string[]
+  emails: string[]
+  fax?: string
+  address?: string
+  postalCode?: string
+}
+
+// 소셜 미디어 정보
+export interface SocialMediaInfo {
+  youtube?: string
+  facebook?: string
+  instagram?: string
+  twitter?: string
+  blog?: string
+  kakao?: string
+  naverCafe?: string
+  naverBlog?: string
+  naverTv?: string
+  other: { platform: string; url: string }[]
+}
+
+// 미디어/이미지 정보
+export interface MediaInfo {
+  logo?: string
+  bannerImages: string[]
+  galleryImages: string[]
+  videos: { url: string; title: string; platform?: string }[]
+  documents: { url: string; title: string; type: string }[]
+}
+
+// 예배 시간 정보
+export interface WorshipTimeInfo {
+  name: string
+  day: string
+  time: string
+  location?: string
+  notes?: string
 }
 
 export interface TaxonomyNode {
@@ -99,8 +164,17 @@ export interface CrawlResult {
   structure?: SiteStructure
   dictionary?: DictionaryEntry[]
   taxonomy?: TaxonomyNode[]
+  popups?: PopupInfo[]
   errors?: string[]
   crawlTime: number
+  progress?: CrawlProgress
+  // 확장된 정보 요약
+  extendedInfo?: {
+    contactsCount: number
+    socialMediaCount: number
+    mediaCount: number
+    worshipTimesCount: number
+  }
 }
 
 // ============ HTML 페칭 ============
@@ -173,79 +247,138 @@ function isSameDomain(url: string, baseUrl: string): boolean {
 // ============ HTML 파싱 ============
 
 /**
- * 네비게이션 메뉴 추출
+ * 네비게이션 메뉴 추출 (강화된 버전)
  */
 function extractNavigation(html: string, baseUrl: string): PageInfo[] {
   const $ = cheerio.load(html)
   const navigation: PageInfo[] = []
+  const seenUrls = new Set<string>()
 
-  // 일반적인 네비게이션 선택자들
+  // 1. 일반적인 네비게이션 선택자들
   const navSelectors = [
+    // 기본 nav 요소
     'nav', 'header nav', '#gnb', '.gnb', '#nav', '.nav',
-    '#menu', '.menu', '.main-menu', '.main_menu',
-    '#header nav', '.header nav', '.navigation',
-    'ul.depth1', 'ul.lnb', 'ul.gnb'
+    '#menu', '.menu', '.main-menu', '.main_menu', '.main-nav',
+    '#header nav', '.header nav', '.navigation', '.top-menu',
+    // depth 기반 클래스
+    'ul.depth1', 'ul.lnb', 'ul.gnb', '.menu-depth1',
+    // 특정 사이트 패턴
+    '#site_menus', '.site_menu', '#topMenu', '.gnb-menu',
+    // div 기반 메뉴
+    '.menu-wrap', '.nav-wrap', '.gnb-wrap', '#gnb-wrap',
+    // 사랑의교회, 온누리교회 등
+    '.header-menu', '.header_menu', '.top-nav', '#top-nav',
+    '.allmenu', '#all-menu', '.all-menu'
   ]
 
+  // 2. 서브메뉴 선택자들
+  const subMenuSelectors = [
+    '> ul > li', '> .sub > li', '> .submenu > li', '> .sub-menu > li',
+    '> .depth2 > li', '> ul.depth2 > li', '> div > ul > li',
+    '> .sub-wrap > ul > li', '> .gnb-sub > li', '> .lnb > li'
+  ]
+
+  // 3. 3차 메뉴 선택자들
+  const thirdLevelSelectors = [
+    '> ul > li', '> .sub > li', '> .depth3 > li', '> ul.depth3 > li',
+    '> .third-menu > li', '> div > ul > li'
+  ]
+
+  // 헬퍼: 메뉴 아이템 생성
+  function createMenuItem(href: string | undefined, title: string, depth: number, parentUrl?: string): PageInfo | null {
+    if (!title || title.length === 0 || title.length > 100) return null
+
+    const url = href ? normalizeUrl(href, baseUrl) : ''
+    if (url && seenUrls.has(url)) return null
+    if (url) seenUrls.add(url)
+
+    return {
+      url,
+      title: title.replace(/\s+/g, ' ').trim(),
+      pageType: depth === 1 ? 'menu' : (depth === 2 ? 'submenu' : 'content'),
+      depth,
+      parentUrl,
+      children: []
+    }
+  }
+
+  // 헬퍼: 링크 텍스트 추출
+  function getLinkText($link: cheerio.Cheerio<cheerio.Element>): string {
+    // span, strong 등 내부 요소 텍스트 우선
+    const spanText = $link.find('span, strong, em').first().text().trim()
+    if (spanText) return spanText
+
+    // 직접 텍스트
+    return $link.clone().children().remove().end().text().trim() || $link.text().trim()
+  }
+
+  // 방법 1: 표준 nav 구조 탐색
   for (const selector of navSelectors) {
     const nav = $(selector).first()
     if (nav.length === 0) continue
 
-    // 1차 메뉴 추출
-    nav.find('> ul > li, > li').each((i, el) => {
+    // 직접 a 태그가 있는 경우 (예: #site_menus > a.site_menu)
+    const directLinks = nav.find('> a')
+    if (directLinks.length > 0) {
+      directLinks.each((i, el) => {
+        const $link = $(el)
+        const href = $link.attr('href')
+        const title = getLinkText($link)
+        const menuItem = createMenuItem(href, title, 1)
+        if (menuItem) navigation.push(menuItem)
+      })
+      if (navigation.length > 0) break
+    }
+
+    // 1차 메뉴 추출 (다양한 구조 지원)
+    const depth1Items = nav.find('> ul > li, > li, > div > ul > li, > div > li')
+    if (depth1Items.length === 0) continue
+
+    depth1Items.each((i, el) => {
       const $li = $(el)
       const $link = $li.find('> a').first()
+      if ($link.length === 0) return
+
       const href = $link.attr('href')
-      const title = $link.text().trim()
+      const title = getLinkText($link)
+      const menuItem = createMenuItem(href, title, 1)
+      if (!menuItem) return
 
-      if (!title || title.length === 0) return
+      // 2차 메뉴 추출 (여러 선택자 시도)
+      for (const subSelector of subMenuSelectors) {
+        const subItems = $li.find(subSelector)
+        if (subItems.length === 0) continue
 
-      const menuItem: PageInfo = {
-        url: href ? normalizeUrl(href, baseUrl) : '',
-        title,
-        pageType: 'menu',
-        depth: 1,
-        children: []
-      }
+        subItems.each((j, subEl) => {
+          const $subLi = $(subEl)
+          const $subLink = $subLi.find('> a').first()
+          if ($subLink.length === 0) return
 
-      // 2차 메뉴 추출
-      $li.find('> ul > li, > .sub > li, > .submenu > li').each((j, subEl) => {
-        const $subLi = $(subEl)
-        const $subLink = $subLi.find('> a').first()
-        const subHref = $subLink.attr('href')
-        const subTitle = $subLink.text().trim()
+          const subHref = $subLink.attr('href')
+          const subTitle = getLinkText($subLink)
+          const subMenuItem = createMenuItem(subHref, subTitle, 2, menuItem.url)
+          if (!subMenuItem) return
 
-        if (!subTitle || subTitle.length === 0) return
+          // 3차 메뉴 추출
+          for (const thirdSelector of thirdLevelSelectors) {
+            const thirdItems = $subLi.find(thirdSelector)
+            thirdItems.each((k, thirdEl) => {
+              const $thirdLi = $(thirdEl)
+              const $thirdLink = $thirdLi.find('> a').first()
+              if ($thirdLink.length === 0) return
 
-        const subMenuItem: PageInfo = {
-          url: subHref ? normalizeUrl(subHref, baseUrl) : '',
-          title: subTitle,
-          pageType: 'submenu',
-          depth: 2,
-          parentUrl: menuItem.url,
-          children: []
-        }
-
-        // 3차 메뉴 추출
-        $subLi.find('> ul > li').each((k, sub2El) => {
-          const $sub2Li = $(sub2El)
-          const $sub2Link = $sub2Li.find('> a').first()
-          const sub2Href = $sub2Link.attr('href')
-          const sub2Title = $sub2Link.text().trim()
-
-          if (sub2Title && sub2Title.length > 0) {
-            subMenuItem.children?.push({
-              url: sub2Href ? normalizeUrl(sub2Href, baseUrl) : '',
-              title: sub2Title,
-              pageType: 'content',
-              depth: 3,
-              parentUrl: subMenuItem.url
+              const thirdHref = $thirdLink.attr('href')
+              const thirdTitle = getLinkText($thirdLink)
+              const thirdItem = createMenuItem(thirdHref, thirdTitle, 3, subMenuItem.url)
+              if (thirdItem) subMenuItem.children?.push(thirdItem)
             })
+            if (subMenuItem.children && subMenuItem.children.length > 0) break
           }
-        })
 
-        menuItem.children?.push(subMenuItem)
-      })
+          menuItem.children?.push(subMenuItem)
+        })
+        if (menuItem.children && menuItem.children.length > 0) break
+      }
 
       navigation.push(menuItem)
     })
@@ -253,7 +386,609 @@ function extractNavigation(html: string, baseUrl: string): PageInfo[] {
     if (navigation.length > 0) break
   }
 
+  // 방법 2: depth 클래스 기반 메뉴 추출
+  if (navigation.length === 0) {
+    const depth1Menu = $('.depth1, .menu-depth1, [class*="depth1"]').first()
+    if (depth1Menu.length > 0) {
+      depth1Menu.find('> li, > a').each((i, el) => {
+        const $el = $(el)
+        const $link = el.tagName === 'a' ? $el : $el.find('> a').first()
+        if ($link.length === 0) return
+
+        const href = $link.attr('href')
+        const title = getLinkText($link)
+        const menuItem = createMenuItem(href, title, 1)
+        if (!menuItem) return
+
+        // depth2 찾기
+        const $depth2 = $el.find('.depth2, .sub-menu, [class*="depth2"]')
+        $depth2.find('> li, > a').each((j, subEl) => {
+          const $subEl = $(subEl)
+          const $subLink = subEl.tagName === 'a' ? $subEl : $subEl.find('> a').first()
+          if ($subLink.length === 0) return
+
+          const subHref = $subLink.attr('href')
+          const subTitle = getLinkText($subLink)
+          const subMenuItem = createMenuItem(subHref, subTitle, 2, menuItem.url)
+          if (subMenuItem) menuItem.children?.push(subMenuItem)
+        })
+
+        navigation.push(menuItem)
+      })
+    }
+  }
+
+  // 방법 3: data-* 속성 기반 메뉴 추출
+  if (navigation.length === 0) {
+    $('[data-menu], [data-nav], [data-depth="1"]').each((i, el) => {
+      const $el = $(el)
+      const $link = $el.is('a') ? $el : $el.find('a').first()
+      if ($link.length === 0) return
+
+      const href = $link.attr('href') || $el.attr('data-href') || $el.attr('data-url')
+      const title = getLinkText($link) || $el.attr('data-title') || ''
+      const menuItem = createMenuItem(href, title, 1)
+      if (menuItem) navigation.push(menuItem)
+    })
+  }
+
+  // 방법 4: 메가 메뉴 패턴 (전체 메뉴 레이어)
+  if (navigation.length === 0) {
+    const megaMenuSelectors = [
+      '.mega-menu', '.all-menu', '#all-menu', '.total-menu', '#total-menu',
+      '.full-menu', '.allmenu-wrap', '.sitemap'
+    ]
+
+    for (const selector of megaMenuSelectors) {
+      const $mega = $(selector)
+      if ($mega.length === 0) continue
+
+      // 섹션별 메뉴 추출
+      $mega.find('.menu-section, .menu-group, .menu-category, > div, > section').each((i, section) => {
+        const $section = $(section)
+        const sectionTitle = $section.find('h2, h3, h4, .title, .menu-title').first().text().trim()
+
+        const menuItem: PageInfo = {
+          url: '',
+          title: sectionTitle || `메뉴 ${i + 1}`,
+          pageType: 'menu',
+          depth: 1,
+          children: []
+        }
+
+        $section.find('a').each((j, link) => {
+          const $link = $(link)
+          const href = $link.attr('href')
+          const title = getLinkText($link)
+          const subMenuItem = createMenuItem(href, title, 2, menuItem.url)
+          if (subMenuItem) menuItem.children?.push(subMenuItem)
+        })
+
+        if (menuItem.children && menuItem.children.length > 0) {
+          navigation.push(menuItem)
+        }
+      })
+
+      if (navigation.length > 0) break
+    }
+  }
+
+  // 방법 5: Bootstrap navbar 패턴 (사랑의교회 등)
+  if (navigation.length === 0) {
+    const $navbar = $('nav.navbar, .navbar-nav, ul.navbar-nav').first()
+    if ($navbar.length > 0) {
+      $navbar.find('> li.nav-item, > .nav-item').each((i, el) => {
+        const $item = $(el)
+        const $link = $item.find('> a.nav-link').first()
+        if ($link.length === 0) return
+
+        const href = $link.attr('href')
+        const title = getLinkText($link)
+        const menuItem = createMenuItem(href, title, 1)
+        if (!menuItem) return
+
+        // 드롭다운 메뉴 (mega-menu 포함)
+        const $dropdown = $item.find('.dropdown-menu, .mega-menu')
+        $dropdown.find('a').each((j, subEl) => {
+          const $subLink = $(subEl)
+          const subHref = $subLink.attr('href')
+          if (!subHref || subHref === '#') return
+          const subTitle = getLinkText($subLink)
+          const subItem = createMenuItem(subHref, subTitle, 2, menuItem.url)
+          if (subItem) menuItem.children?.push(subItem)
+        })
+
+        navigation.push(menuItem)
+      })
+    }
+  }
+
+  // 방법 6: 온누리교회 스타일 (.gnb, .gnbul + panel 기반)
+  if (navigation.length === 0) {
+    // gnbul 메뉴 찾기
+    const $gnbul = $('ul.gnbul, .gnbul').first()
+    if ($gnbul.length > 0) {
+      $gnbul.find('> li').each((i, el) => {
+        const $item = $(el)
+        const $link = $item.find('> a').first()
+        if ($link.length === 0) return
+
+        const href = $link.attr('href') || ''
+        const title = getLinkText($link)
+        const menuItem = createMenuItem(href.startsWith('#') ? '' : href, title, 1)
+        if (!menuItem) return
+
+        // 패널 ID 추출 (예: #panel01 -> panel01)
+        const panelId = href.startsWith('#') ? href.substring(1) : `panel0${i + 1}`
+        const $panel = $(`#${panelId}`)
+
+        if ($panel.length > 0) {
+          // 온누리교회 스타일: div.el > h4 > a, ul.lst > li > a
+          $panel.find('h4 > a, .el h4 a').each((j, subEl) => {
+            const $subLink = $(subEl)
+            const subHref = $subLink.attr('href')
+            if (!subHref || subHref === '#' || subHref.startsWith('javascript:')) return
+            const subTitle = getLinkText($subLink).replace(/more$/i, '').trim()
+            const subItem = createMenuItem(subHref, subTitle, 2, menuItem.url)
+            if (subItem) menuItem.children?.push(subItem)
+          })
+
+          // 리스트 아이템들
+          $panel.find('ul.lst a, .lst a').each((j, subEl) => {
+            const $subLink = $(subEl)
+            const subHref = $subLink.attr('href')
+            if (!subHref || subHref === '#' || subHref.startsWith('javascript:')) return
+            const subTitle = getLinkText($subLink)
+            const subItem = createMenuItem(subHref, subTitle, 3, menuItem.url)
+            if (subItem) menuItem.children?.push(subItem)
+          })
+
+          // 일반 링크들
+          $panel.find('a').each((j, subEl) => {
+            const $subLink = $(subEl)
+            const subHref = $subLink.attr('href')
+            if (!subHref || subHref === '#' || subHref.startsWith('javascript:')) return
+            const subTitle = getLinkText($subLink).replace(/more$/i, '').trim()
+            if (!subTitle || menuItem.children?.some(c => c.url === normalizeUrl(subHref, baseUrl))) return
+            const subItem = createMenuItem(subHref, subTitle, 2, menuItem.url)
+            if (subItem) menuItem.children?.push(subItem)
+          })
+        }
+
+        navigation.push(menuItem)
+      })
+    }
+
+    // 일반 .gnb 메뉴
+    if (navigation.length === 0) {
+      const $gnb = $('nav.gnb, .gnb, #gnb').first()
+      if ($gnb.length > 0) {
+        const $depth1Items = $gnb.find('> ul > li, .gnbul > li')
+        $depth1Items.each((i, el) => {
+          const $item = $(el)
+          const $link = $item.find('> a').first()
+          if ($link.length === 0) return
+
+          const href = $link.attr('href')
+          const title = getLinkText($link)
+          const menuItem = createMenuItem(href, title, 1)
+          if (!menuItem) return
+
+          // 일반 서브메뉴
+          $item.find('> ul > li > a, > .sub > li > a').each((j, subEl) => {
+            const $subLink = $(subEl)
+            const subHref = $subLink.attr('href')
+            if (!subHref || subHref === '#') return
+            const subTitle = getLinkText($subLink)
+            const subItem = createMenuItem(subHref, subTitle, 2, menuItem.url)
+            if (subItem) menuItem.children?.push(subItem)
+          })
+
+          navigation.push(menuItem)
+        })
+      }
+    }
+  }
+
+  // 방법 7: 메가 메뉴 패널 직접 탐색
+  if (navigation.length === 0 || navigation.every(n => !n.children || n.children.length === 0)) {
+    // 메가 메뉴 패널에서 직접 링크 수집
+    $('.mega-menu, .mega-menu-content, .dropdown-menu').each((i, el) => {
+      const $menu = $(el)
+      // 패널 제목 찾기
+      const panelTitle = $menu.closest('li').find('> a').first().text().trim() ||
+                        $menu.find('h2, h3, h4, .title').first().text().trim() ||
+                        `메뉴 ${i + 1}`
+
+      // 기존 네비게이션에서 해당 메뉴 찾기
+      let menuItem = navigation.find(n => n.title === panelTitle)
+      if (!menuItem) {
+        menuItem = createMenuItem('', panelTitle, 1)
+        if (menuItem) navigation.push(menuItem)
+      }
+      if (!menuItem) return
+
+      // 패널 내 링크 수집
+      $menu.find('a').each((j, linkEl) => {
+        const $link = $(linkEl)
+        const href = $link.attr('href')
+        if (!href || href === '#' || href.startsWith('javascript:')) return
+        const title = getLinkText($link)
+        if (!title) return
+
+        // 중복 확인
+        if (!menuItem!.children?.some(c => c.title === title)) {
+          const subItem = createMenuItem(href, title, 2, menuItem!.url)
+          if (subItem) menuItem!.children?.push(subItem)
+        }
+      })
+    })
+  }
+
+  // 방법 8: 헤더 영역 모든 링크 수집 (최후의 수단)
+  if (navigation.length === 0) {
+    const headerLinks = $('header a, #header a, .header a').filter((i, el) => {
+      const href = $(el).attr('href') || ''
+      // 로그인, 검색 등 유틸리티 링크 제외
+      if (/login|search|member|join|signup/i.test(href)) return false
+      if (href.startsWith('#') || href.startsWith('javascript:')) return false
+      return true
+    })
+
+    headerLinks.each((i, el) => {
+      const $link = $(el)
+      const href = $link.attr('href')
+      const title = getLinkText($link)
+      const menuItem = createMenuItem(href, title, 1)
+      if (menuItem) navigation.push(menuItem)
+    })
+  }
+
   return navigation
+}
+
+/**
+ * 팝업/모달 URL 감지
+ */
+function detectPopups(html: string, baseUrl: string): PopupInfo[] {
+  const $ = cheerio.load(html)
+  const popups: PopupInfo[] = []
+  const seenUrls = new Set<string>()
+
+  // 1. onclick 속성에서 URL 추출
+  $('[onclick]').each((i, el) => {
+    const onclick = $(el).attr('onclick') || ''
+    const title = $(el).text().trim() || $(el).attr('title') || '팝업'
+
+    // window.open 패턴
+    const windowOpenMatch = onclick.match(/window\.open\s*\(\s*['"]([^'"]+)['"]/i)
+    if (windowOpenMatch) {
+      const url = normalizeUrl(windowOpenMatch[1], baseUrl)
+      if (!seenUrls.has(url) && isSameDomain(url, baseUrl)) {
+        seenUrls.add(url)
+        popups.push({
+          url,
+          title,
+          triggerType: 'window.open',
+          triggerElement: el.tagName
+        })
+      }
+    }
+
+    // location.href 패턴
+    const locationMatch = onclick.match(/location\.href\s*=\s*['"]([^'"]+)['"]/i)
+    if (locationMatch) {
+      const url = normalizeUrl(locationMatch[1], baseUrl)
+      if (!seenUrls.has(url) && isSameDomain(url, baseUrl)) {
+        seenUrls.add(url)
+        popups.push({
+          url,
+          title,
+          triggerType: 'onclick',
+          triggerElement: el.tagName
+        })
+      }
+    }
+
+    // 일반 함수 호출에서 URL 추출
+    const funcMatch = onclick.match(/['"]([^'"]*(?:popup|layer|modal|view|detail)[^'"]*)['"]/i)
+    if (funcMatch && funcMatch[1].includes('/')) {
+      const url = normalizeUrl(funcMatch[1], baseUrl)
+      if (!seenUrls.has(url) && isSameDomain(url, baseUrl)) {
+        seenUrls.add(url)
+        popups.push({
+          url,
+          title,
+          triggerType: 'onclick',
+          triggerElement: el.tagName
+        })
+      }
+    }
+  })
+
+  // 2. data-* 속성에서 URL 추출
+  const dataAttrs = ['data-url', 'data-href', 'data-link', 'data-popup', 'data-src', 'data-target-url']
+  for (const attr of dataAttrs) {
+    $(`[${attr}]`).each((i, el) => {
+      const value = $(el).attr(attr) || ''
+      if (value.startsWith('/') || value.startsWith('http')) {
+        const url = normalizeUrl(value, baseUrl)
+        const title = $(el).text().trim() || $(el).attr('title') || '팝업'
+        if (!seenUrls.has(url) && isSameDomain(url, baseUrl)) {
+          seenUrls.add(url)
+          popups.push({
+            url,
+            title,
+            triggerType: 'data-url',
+            triggerElement: el.tagName
+          })
+        }
+      }
+    })
+  }
+
+  // 3. javascript: href에서 URL 추출
+  $('a[href^="javascript:"]').each((i, el) => {
+    const href = $(el).attr('href') || ''
+    const title = $(el).text().trim() || '팝업'
+
+    // URL 패턴 추출
+    const urlMatch = href.match(/['"]([^'"]+\.[a-z]{2,4}(?:\?[^'"]*)?)['"]/i)
+    if (urlMatch) {
+      const url = normalizeUrl(urlMatch[1], baseUrl)
+      if (!seenUrls.has(url) && isSameDomain(url, baseUrl)) {
+        seenUrls.add(url)
+        popups.push({
+          url,
+          title,
+          triggerType: 'href',
+          triggerElement: 'a'
+        })
+      }
+    }
+  })
+
+  // 4. 레이어/모달 트리거 버튼 감지
+  $('[data-toggle="modal"], [data-bs-toggle="modal"], .layer-open, .popup-open, .modal-trigger').each((i, el) => {
+    const target = $(el).attr('data-target') || $(el).attr('data-bs-target') || $(el).attr('href')
+    if (target && target.startsWith('#')) {
+      // 레이어 팝업 (인라인)
+      const layerContent = $(target).html()
+      if (layerContent) {
+        popups.push({
+          url: target,
+          title: $(el).text().trim() || '레이어 팝업',
+          triggerType: 'layer',
+          triggerElement: el.tagName
+        })
+      }
+    }
+  })
+
+  return popups
+}
+
+/**
+ * 페이지에서 추가 링크 추출 (깊은 크롤링용)
+ */
+function extractLinksFromPage(html: string, baseUrl: string, currentDepth: number): PageInfo[] {
+  const $ = cheerio.load(html)
+  const links: PageInfo[] = []
+  const seenUrls = new Set<string>()
+
+  // 콘텐츠 영역의 링크 추출
+  const contentSelectors = [
+    'main', '#content', '.content', '#container', '.container',
+    'article', '.article', '.board-list', '.list-wrap',
+    '.sub-content', '.page-content', '#sub', '.sub'
+  ]
+
+  let $content = $('body')
+  for (const selector of contentSelectors) {
+    const $found = $(selector)
+    if ($found.length > 0) {
+      $content = $found
+      break
+    }
+  }
+
+  $content.find('a[href]').each((i, el) => {
+    const href = $(el).attr('href')
+    if (!href) return
+
+    // 스킵할 패턴
+    if (href.startsWith('#') ||
+        href.startsWith('javascript:void') ||
+        href.startsWith('mailto:') ||
+        href.startsWith('tel:') ||
+        href === '#') {
+      return
+    }
+
+    const url = normalizeUrl(href, baseUrl)
+    if (seenUrls.has(url)) return
+    if (!isSameDomain(url, baseUrl)) return
+
+    seenUrls.add(url)
+
+    const title = $(el).text().trim() || $(el).attr('title') || url.split('/').pop() || ''
+    if (!title || title.length > 200) return
+
+    // 페이지 타입 추론
+    let pageType: PageInfo['pageType'] = 'content'
+    let contentType: PageInfo['contentType'] = 'static'
+
+    if (/board|bbs|notice|news/i.test(url)) {
+      pageType = 'board'
+      contentType = 'board'
+    } else if (/gallery|photo|album/i.test(url)) {
+      contentType = 'gallery'
+    } else if (/video|vod|media/i.test(url)) {
+      contentType = 'video'
+    } else if (/list|archive/i.test(url)) {
+      contentType = 'list'
+    }
+
+    links.push({
+      url,
+      title,
+      pageType,
+      depth: currentDepth + 1,
+      parentUrl: baseUrl,
+      contentType,
+      children: []
+    })
+  })
+
+  return links
+}
+
+/**
+ * 딥 크롤링: 실제로 각 페이지를 방문하여 콘텐츠 추출
+ */
+async function deepCrawlPages(
+  pages: PageInfo[],
+  baseUrl: string,
+  options: {
+    maxDepth: number
+    maxPages: number
+    delayMs?: number
+    onProgress?: (progress: CrawlProgress) => void
+  }
+): Promise<{
+  crawledPages: PageInfo[]
+  allPopups: PopupInfo[]
+  dictionary: DictionaryEntry[]
+  errors: string[]
+}> {
+  const visitedUrls = new Set<string>()
+  const allPopups: PopupInfo[] = []
+  const dictionary: DictionaryEntry[] = []
+  const errors: string[] = []
+  const crawledPages: PageInfo[] = []
+
+  const delayMs = options.delayMs || 500  // 서버 부하 방지
+
+  // BFS 방식으로 크롤링
+  const queue: PageInfo[] = [...pages]
+  let crawledCount = 0
+
+  while (queue.length > 0 && crawledCount < options.maxPages) {
+    const page = queue.shift()!
+
+    // 이미 방문했거나 깊이 초과시 스킵
+    if (visitedUrls.has(page.url) || page.depth > options.maxDepth) {
+      continue
+    }
+
+    // URL이 없거나 외부 링크면 스킵
+    if (!page.url || page.pageType === 'external' || !isSameDomain(page.url, baseUrl)) {
+      continue
+    }
+
+    visitedUrls.add(page.url)
+    crawledCount++
+
+    // 진행 상황 콜백
+    if (options.onProgress) {
+      options.onProgress({
+        totalPages: queue.length + crawledCount,
+        crawledPages: crawledCount,
+        currentUrl: page.url,
+        currentDepth: page.depth,
+        errors
+      })
+    }
+
+    console.log(`[DeepCrawl] (${crawledCount}/${options.maxPages}) depth:${page.depth} ${page.url}`)
+
+    try {
+      // 페이지 fetch
+      const html = await fetchHTML(page.url)
+
+      if (!html) {
+        page.crawlError = '페이지 로드 실패'
+        errors.push(`${page.url}: 로드 실패`)
+        continue
+      }
+
+      page.crawled = true
+
+      // 팝업 감지
+      const pagePopups = detectPopups(html, baseUrl)
+      allPopups.push(...pagePopups)
+
+      // 페이지 메타데이터 추출
+      page.extractedData = extractPageMetadata(html)
+
+      // 추가 링크 추출 (다음 depth로)
+      if (page.depth < options.maxDepth) {
+        const childLinks = extractLinksFromPage(html, page.url, page.depth)
+
+        // 중복되지 않은 링크만 큐에 추가
+        for (const link of childLinks) {
+          if (!visitedUrls.has(link.url)) {
+            page.children = page.children || []
+            page.children.push(link)
+            queue.push(link)
+          }
+        }
+      }
+
+      // 인물 정보 페이지면 사전에 추가
+      const peopleKeywords = ['목사', '장로', '전도사', '사역자', '교역자', '집사', '권사']
+      if (peopleKeywords.some(kw => page.title.includes(kw) || page.url.includes(kw))) {
+        const people = await extractPeopleFromPage(html, page.url, '인물')
+        dictionary.push(...people)
+      }
+
+      crawledPages.push(page)
+
+      // 딜레이
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+
+    } catch (error: any) {
+      page.crawlError = error.message
+      errors.push(`${page.url}: ${error.message}`)
+    }
+  }
+
+  // 팝업 페이지도 크롤링
+  for (const popup of allPopups) {
+    if (visitedUrls.has(popup.url) || crawledCount >= options.maxPages) continue
+    if (popup.triggerType === 'layer') continue  // 인라인 레이어는 스킵
+
+    visitedUrls.add(popup.url)
+    crawledCount++
+
+    console.log(`[DeepCrawl] 팝업 크롤링: ${popup.url}`)
+
+    try {
+      const html = await fetchHTML(popup.url)
+      if (html) {
+        const popupPage: PageInfo = {
+          url: popup.url,
+          title: popup.title,
+          pageType: 'popup',
+          depth: 0,
+          contentType: 'popup',
+          extractedData: extractPageMetadata(html),
+          crawled: true
+        }
+        crawledPages.push(popupPage)
+      }
+
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    } catch (error: any) {
+      errors.push(`팝업 ${popup.url}: ${error.message}`)
+    }
+  }
+
+  return { crawledPages, allPopups, dictionary, errors }
 }
 
 /**
@@ -315,6 +1050,354 @@ function extractPageMetadata(html: string): any {
     charset: $('meta[charset]').attr('charset') || 'utf-8',
     viewport: $('meta[name="viewport"]').attr('content') || ''
   }
+}
+
+/**
+ * 연락처 정보 추출
+ */
+function extractContactInfo(html: string): ContactInfo {
+  const $ = cheerio.load(html)
+  const phones: string[] = []
+  const emails: string[] = []
+  let fax: string | undefined
+  let address: string | undefined
+  let postalCode: string | undefined
+
+  // 전화번호 패턴
+  const phonePatterns = [
+    /0\d{1,2}[-).\s]?\d{3,4}[-).\s]?\d{4}/g,  // 02-1234-5678, 031.123.4567
+    /\d{3,4}[-).\s]?\d{3,4}[-).\s]?\d{4}/g,    // 1588-1234
+    /\(0\d{1,2}\)\s?\d{3,4}[-).\s]?\d{4}/g     // (02) 1234-5678
+  ]
+
+  // 이메일 패턴
+  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g
+
+  // 주소 패턴
+  const addressPatterns = [
+    /(?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)[^\n<]{10,100}/g,
+    /\d{5}\s*[가-힣\s\d-]+/g  // 우편번호 + 주소
+  ]
+
+  const bodyText = $('body').text()
+  const footerText = $('footer, .footer, #footer').text()
+  const contactText = $('[class*="contact"], [class*="address"], [class*="info"]').text()
+
+  // 텍스트에서 패턴 추출
+  const allText = footerText + ' ' + contactText + ' ' + bodyText
+
+  // 전화번호 추출
+  for (const pattern of phonePatterns) {
+    const matches = allText.match(pattern)
+    if (matches) {
+      for (const match of matches) {
+        const cleaned = match.replace(/[\s.()-]/g, '')
+        if (cleaned.length >= 9 && cleaned.length <= 12 && !phones.includes(match.trim())) {
+          // 팩스 여부 확인
+          const beforeMatch = allText.substring(Math.max(0, allText.indexOf(match) - 10), allText.indexOf(match))
+          if (/fax|팩스|FAX/i.test(beforeMatch)) {
+            fax = match.trim()
+          } else {
+            phones.push(match.trim())
+          }
+        }
+      }
+    }
+  }
+
+  // 이메일 추출
+  const emailMatches = allText.match(emailPattern)
+  if (emailMatches) {
+    for (const email of emailMatches) {
+      if (!emails.includes(email) && !email.includes('example.com')) {
+        emails.push(email)
+      }
+    }
+  }
+
+  // 주소 추출 (footer, contact 영역 우선)
+  const addressAreaText = footerText + ' ' + contactText
+  for (const pattern of addressPatterns) {
+    const matches = addressAreaText.match(pattern)
+    if (matches && matches.length > 0) {
+      const rawAddress = matches[0].trim()
+      // 우편번호 추출
+      const postalMatch = rawAddress.match(/\d{5}/)
+      if (postalMatch) {
+        postalCode = postalMatch[0]
+      }
+      address = rawAddress.replace(/^\d{5}\s*/, '').trim()
+      break
+    }
+  }
+
+  // tel: href에서 추출
+  $('a[href^="tel:"]').each((_, el) => {
+    const tel = $(el).attr('href')?.replace('tel:', '').trim()
+    if (tel && !phones.includes(tel)) {
+      phones.push(tel)
+    }
+  })
+
+  // mailto: href에서 추출
+  $('a[href^="mailto:"]').each((_, el) => {
+    const email = $(el).attr('href')?.replace('mailto:', '').split('?')[0].trim()
+    if (email && !emails.includes(email)) {
+      emails.push(email)
+    }
+  })
+
+  return {
+    phones: phones.slice(0, 5),  // 최대 5개
+    emails: emails.slice(0, 3),  // 최대 3개
+    fax,
+    address,
+    postalCode
+  }
+}
+
+/**
+ * 소셜 미디어 링크 추출
+ */
+function extractSocialMedia(html: string, baseUrl: string): SocialMediaInfo {
+  const $ = cheerio.load(html)
+  const socialMedia: SocialMediaInfo = { other: [] }
+
+  // 소셜 미디어 플랫폼 패턴
+  const platforms: { pattern: RegExp; key: keyof SocialMediaInfo }[] = [
+    { pattern: /youtube\.com|youtu\.be/i, key: 'youtube' },
+    { pattern: /facebook\.com|fb\.com/i, key: 'facebook' },
+    { pattern: /instagram\.com/i, key: 'instagram' },
+    { pattern: /twitter\.com|x\.com/i, key: 'twitter' },
+    { pattern: /blog\.naver\.com/i, key: 'naverBlog' },
+    { pattern: /cafe\.naver\.com/i, key: 'naverCafe' },
+    { pattern: /tv\.naver\.com/i, key: 'naverTv' },
+    { pattern: /pf\.kakao\.com|story\.kakao\.com|ch\.kakao\.com/i, key: 'kakao' }
+  ]
+
+  // 모든 링크에서 소셜 미디어 찾기
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href')
+    if (!href) return
+
+    // 외부 링크인지 확인
+    if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('//')) {
+      return
+    }
+
+    for (const { pattern, key } of platforms) {
+      if (pattern.test(href)) {
+        if (key !== 'other' && !socialMedia[key]) {
+          (socialMedia as any)[key] = href
+        }
+        return
+      }
+    }
+
+    // 기타 소셜 미디어 (블로그 등)
+    if (/blog|tistory|brunch/i.test(href) && !socialMedia.blog) {
+      socialMedia.blog = href
+    }
+  })
+
+  // 아이콘 기반 소셜 미디어 감지
+  $('i[class*="youtube"], .fa-youtube, .icon-youtube, [class*="sns_youtube"]').closest('a').each((_, el) => {
+    const href = $(el).attr('href')
+    if (href && !socialMedia.youtube) socialMedia.youtube = href
+  })
+
+  $('i[class*="facebook"], .fa-facebook, .icon-facebook, [class*="sns_facebook"]').closest('a').each((_, el) => {
+    const href = $(el).attr('href')
+    if (href && !socialMedia.facebook) socialMedia.facebook = href
+  })
+
+  $('i[class*="instagram"], .fa-instagram, .icon-instagram, [class*="sns_instagram"]').closest('a').each((_, el) => {
+    const href = $(el).attr('href')
+    if (href && !socialMedia.instagram) socialMedia.instagram = href
+  })
+
+  return socialMedia
+}
+
+/**
+ * 미디어 정보 추출
+ */
+function extractMediaInfo(html: string, baseUrl: string): MediaInfo {
+  const $ = cheerio.load(html)
+  const media: MediaInfo = {
+    bannerImages: [],
+    galleryImages: [],
+    videos: [],
+    documents: []
+  }
+
+  // 로고 추출
+  const logoSelectors = [
+    '.logo img', '#logo img', 'h1 img', '.header-logo img',
+    'a.logo img', '[class*="logo"] img', 'header img'
+  ]
+  for (const selector of logoSelectors) {
+    const $logo = $(selector).first()
+    if ($logo.length > 0) {
+      const src = $logo.attr('src')
+      if (src) {
+        media.logo = normalizeUrl(src, baseUrl)
+        break
+      }
+    }
+  }
+
+  // 배너 이미지 추출
+  const bannerSelectors = [
+    '.slider img', '.banner img', '.carousel img', '.swiper img',
+    '.main-visual img', '.hero img', '.key-visual img',
+    '[class*="banner"] img', '[class*="slide"] img'
+  ]
+  const seenBanners = new Set<string>()
+  for (const selector of bannerSelectors) {
+    $(selector).each((_, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src')
+      if (src) {
+        const fullUrl = normalizeUrl(src, baseUrl)
+        if (!seenBanners.has(fullUrl)) {
+          seenBanners.add(fullUrl)
+          media.bannerImages.push(fullUrl)
+        }
+      }
+    })
+  }
+
+  // 갤러리 이미지 추출
+  const gallerySelectors = [
+    '.gallery img', '[class*="gallery"] img', '.photo-list img',
+    '.album img', '[class*="photo"] img'
+  ]
+  const seenGallery = new Set<string>()
+  for (const selector of gallerySelectors) {
+    $(selector).each((_, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src')
+      if (src) {
+        const fullUrl = normalizeUrl(src, baseUrl)
+        if (!seenGallery.has(fullUrl)) {
+          seenGallery.add(fullUrl)
+          media.galleryImages.push(fullUrl)
+        }
+      }
+    })
+  }
+
+  // 비디오 링크 추출
+  $('iframe[src*="youtube"], iframe[src*="youtu.be"]').each((_, el) => {
+    const src = $(el).attr('src')
+    if (src) {
+      media.videos.push({
+        url: src,
+        title: $(el).attr('title') || 'YouTube 영상',
+        platform: 'youtube'
+      })
+    }
+  })
+
+  $('iframe[src*="vimeo"]').each((_, el) => {
+    const src = $(el).attr('src')
+    if (src) {
+      media.videos.push({
+        url: src,
+        title: $(el).attr('title') || 'Vimeo 영상',
+        platform: 'vimeo'
+      })
+    }
+  })
+
+  // 문서 링크 추출
+  $('a[href$=".pdf"], a[href$=".hwp"], a[href$=".doc"], a[href$=".docx"]').each((_, el) => {
+    const href = $(el).attr('href')
+    if (href) {
+      const ext = href.split('.').pop()?.toLowerCase() || ''
+      media.documents.push({
+        url: normalizeUrl(href, baseUrl),
+        title: $(el).text().trim() || '문서',
+        type: ext
+      })
+    }
+  })
+
+  return media
+}
+
+/**
+ * 예배 시간 정보 추출
+ */
+function extractWorshipTimes(html: string): WorshipTimeInfo[] {
+  const $ = cheerio.load(html)
+  const worshipTimes: WorshipTimeInfo[] = []
+
+  // 예배 관련 키워드
+  const worshipKeywords = ['예배', '주일', '수요', '새벽', '금요', '토요', '청년', '장년', '어린이', '유아', '영아']
+  const dayKeywords = ['주일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일', '매일']
+  const timePattern = /(\d{1,2})[:\s]?(\d{0,2})\s*(am|pm|오전|오후)?/gi
+
+  // 예배 안내 영역 찾기
+  const worshipSelectors = [
+    '[class*="worship"]', '[class*="service"]', '[class*="예배"]',
+    '.time-table', '.schedule', '[id*="worship"]', '[id*="service"]'
+  ]
+
+  for (const selector of worshipSelectors) {
+    const $section = $(selector)
+    if ($section.length === 0) continue
+
+    // 테이블 형식
+    $section.find('tr').each((_, row) => {
+      const cells = $(row).find('td, th')
+      if (cells.length >= 2) {
+        const name = $(cells[0]).text().trim()
+        const timeText = $(cells[1]).text().trim()
+        const location = cells.length >= 3 ? $(cells[2]).text().trim() : undefined
+
+        if (worshipKeywords.some(kw => name.includes(kw))) {
+          const dayMatch = dayKeywords.find(d => name.includes(d) || timeText.includes(d))
+          worshipTimes.push({
+            name,
+            day: dayMatch || '주일',
+            time: timeText,
+            location
+          })
+        }
+      }
+    })
+
+    // 리스트 형식
+    $section.find('li, p, div').each((_, el) => {
+      const text = $(el).text().trim()
+      if (worshipKeywords.some(kw => text.includes(kw))) {
+        const parts = text.split(/[:\-–—]/)
+        if (parts.length >= 2) {
+          const name = parts[0].trim()
+          const rest = parts.slice(1).join(':').trim()
+          const dayMatch = dayKeywords.find(d => text.includes(d))
+
+          // 시간 추출
+          const timeMatch = rest.match(timePattern)
+          if (timeMatch) {
+            worshipTimes.push({
+              name,
+              day: dayMatch || '주일',
+              time: timeMatch[0],
+              notes: rest.replace(timeMatch[0], '').trim() || undefined
+            })
+          }
+        }
+      }
+    })
+  }
+
+  // 중복 제거
+  const unique = worshipTimes.filter((wt, idx, arr) =>
+    arr.findIndex(w => w.name === wt.name && w.day === wt.day) === idx
+  )
+
+  return unique.slice(0, 20)  // 최대 20개
 }
 
 // ============ AI 분석 ============
@@ -451,6 +1534,11 @@ export async function crawlChurchWebsite(
     maxPages?: number
     extractPeople?: boolean
     extractBoards?: boolean
+    extractContacts?: boolean   // 연락처 정보 추출
+    extractMedia?: boolean      // 미디어/소셜미디어 정보 추출
+    deepCrawl?: boolean         // 실제 서브페이지 방문 여부
+    delayMs?: number            // 요청 간 딜레이 (ms)
+    onProgress?: (progress: CrawlProgress) => void
   }
 ): Promise<CrawlResult> {
   const startTime = Date.now()
@@ -493,58 +1581,156 @@ export async function crawlChurchWebsite(
   const boards = detectBoards(mainHtml, church.homepage_url)
   const metadata = extractPageMetadata(mainHtml)
 
-  console.log(`[Crawler] 메뉴 ${navigation.length}개, 게시판 ${boards.length}개 발견`)
+  // 확장된 정보 추출
+  const contacts = options?.extractContacts !== false ? extractContactInfo(mainHtml) : undefined
+  const socialMedia = options?.extractMedia !== false ? extractSocialMedia(mainHtml, church.homepage_url) : undefined
+  const media = options?.extractMedia !== false ? extractMediaInfo(mainHtml, church.homepage_url) : undefined
+  const worshipTimes = extractWorshipTimes(mainHtml)
 
-  // 4. AI 분석으로 상세 구조 추출
+  console.log(`[Crawler] 메뉴 ${navigation.length}개, 게시판 ${boards.length}개 발견`)
+  console.log(`[Crawler] 연락처: 전화 ${contacts?.phones.length || 0}개, 이메일 ${contacts?.emails.length || 0}개`)
+  console.log(`[Crawler] 소셜미디어: ${Object.keys(socialMedia || {}).filter(k => k !== 'other' && (socialMedia as any)?.[k]).length}개`)
+  console.log(`[Crawler] 예배시간: ${worshipTimes.length}개`)
+
+  // 4. 메인 페이지에서 팝업/모달 감지
+  const mainPopups = detectPopups(mainHtml, church.homepage_url)
+  console.log(`[Crawler] 메인 페이지 팝업 ${mainPopups.length}개 발견`)
+
+  // 5. AI 분석으로 상세 구조 추출
   const aiAnalysis = await analyzeStructureWithAI(mainHtml, church.homepage_url)
 
-  // 5. 구조 결합
+  // 6. 인물 정보 추출 (선택적)
+  // AI 응답이 배열이 아닐 수 있으므로 확인
+  let dictionary: DictionaryEntry[] = Array.isArray(aiAnalysis.dictionary) ? aiAnalysis.dictionary : []
+  let allPopups: PopupInfo[] = [...mainPopups]
+  let finalNavigation = navigation.length > 0 ? navigation : (aiAnalysis.structure?.navigation || [])
+  let crawlProgress: CrawlProgress | undefined
+
+  // 7. 딥 크롤링 (옵션)
+  if (options?.deepCrawl) {
+    console.log(`[Crawler] 딥 크롤링 시작 (maxDepth: ${maxDepth}, maxPages: ${maxPages})`)
+
+    // 모든 네비게이션 아이템을 flat하게 수집
+    const allPages: PageInfo[] = []
+    function collectPages(items: PageInfo[]) {
+      for (const item of items) {
+        if (item.url) allPages.push(item)
+        if (item.children) collectPages(item.children)
+      }
+    }
+    collectPages(finalNavigation)
+    allPages.push(...boards)
+
+    console.log(`[Crawler] 딥 크롤링 대상 페이지: ${allPages.length}개`)
+
+    const deepResult = await deepCrawlPages(allPages, church.homepage_url, {
+      maxDepth,
+      maxPages,
+      delayMs: options.delayMs || 500,
+      onProgress: options.onProgress
+    })
+
+    // 결과 병합
+    allPopups.push(...deepResult.allPopups)
+    dictionary.push(...deepResult.dictionary)
+    errors.push(...deepResult.errors)
+
+    // 네비게이션에 크롤링 정보 업데이트
+    const crawledUrlMap = new Map<string, PageInfo>()
+    for (const page of deepResult.crawledPages) {
+      crawledUrlMap.set(page.url, page)
+    }
+
+    function updateCrawlStatus(items: PageInfo[]) {
+      for (const item of items) {
+        const crawled = crawledUrlMap.get(item.url)
+        if (crawled) {
+          item.crawled = crawled.crawled
+          item.extractedData = crawled.extractedData
+          item.crawlError = crawled.crawlError
+        }
+        if (item.children) updateCrawlStatus(item.children)
+      }
+    }
+    updateCrawlStatus(finalNavigation)
+
+    crawlProgress = {
+      totalPages: deepResult.crawledPages.length,
+      crawledPages: deepResult.crawledPages.filter(p => p.crawled).length,
+      currentUrl: '',
+      currentDepth: maxDepth,
+      errors: deepResult.errors
+    }
+
+    console.log(`[Crawler] 딥 크롤링 완료: ${crawlProgress.crawledPages}/${crawlProgress.totalPages} 페이지, 팝업 ${allPopups.length}개`)
+  } else {
+    // 기본 크롤링: 인물 페이지만 추가 크롤링
+    if (options?.extractPeople) {
+      const pastorPages = findPeoplePages(finalNavigation, ['목사', '담임', '교역자', '사역자'])
+      for (const page of pastorPages.slice(0, 5)) {
+        const html = await fetchHTML(page.url)
+        if (html) {
+          const people = await extractPeopleFromPage(html, page.url, '목사')
+          dictionary.push(...people)
+        }
+      }
+    }
+  }
+
+  // 8. 구조 결합
   const structure: SiteStructure = {
     church: {
       name: church.name,
       code: church.code,
       url: church.homepage_url
     },
-    navigation: navigation.length > 0 ? navigation : (aiAnalysis.structure?.navigation || []),
+    navigation: finalNavigation,
     boards,
-    specialPages: [],
+    specialPages: allPopups.map(p => ({
+      url: p.url,
+      title: p.title,
+      pageType: 'popup' as const,
+      depth: 0,
+      contentType: 'popup' as const
+    })),
     metadata: {
-      totalPages: navigation.reduce((acc, m) => acc + 1 + (m.children?.length || 0), 0),
+      totalPages: crawlProgress?.totalPages ||
+        finalNavigation.reduce((acc, m) => acc + 1 + (m.children?.length || 0), 0),
       maxDepth,
       hasLogin: mainHtml.includes('login') || mainHtml.includes('로그인'),
       hasMobileVersion: mainHtml.includes('mobile') || metadata.viewport.includes('width=device-width'),
       technologies: detectTechnologies(mainHtml)
-    }
+    },
+    // 확장된 정보
+    contacts,
+    socialMedia,
+    media,
+    worshipTimes
   }
 
-  // 6. 인물 정보 추출 (선택적)
-  let dictionary: DictionaryEntry[] = aiAnalysis.dictionary || []
+  // 9. DB 저장
+  const taxonomy = Array.isArray(aiAnalysis.taxonomy) ? aiAnalysis.taxonomy : []
+  await saveCrawlResult(church.id, structure, dictionary, taxonomy)
 
-  if (options?.extractPeople) {
-    // 목사 페이지 크롤링
-    const pastorPages = findPeoplePages(navigation, ['목사', '담임', '교역자', '사역자'])
-    for (const page of pastorPages.slice(0, 5)) {
-      const html = await fetchHTML(page.url)
-      if (html) {
-        const people = await extractPeopleFromPage(html, page.url, '목사')
-        dictionary.push(...people)
-      }
-    }
-  }
-
-  // 7. DB 저장
-  await saveCrawlResult(church.id, structure, dictionary, aiAnalysis.taxonomy || [])
-
-  // 8. 크롤링 로그 저장
+  // 10. 크롤링 로그 저장
   await getSupabase().from('church_crawl_logs').insert({
     church_id: church.id,
-    crawl_type: 'full',
+    crawl_type: options?.deepCrawl ? 'deep' : 'full',
     status: 'completed',
-    pages_crawled: structure.metadata.totalPages,
+    pages_crawled: crawlProgress?.crawledPages || structure.metadata.totalPages,
     items_extracted: dictionary.length,
+    errors_count: errors.length,
     started_at: new Date(startTime).toISOString(),
     completed_at: new Date().toISOString(),
-    result_summary: { navigation: navigation.length, boards: boards.length, dictionary: dictionary.length }
+    result_summary: {
+      navigation: finalNavigation.length,
+      boards: boards.length,
+      popups: allPopups.length,
+      dictionary: dictionary.length,
+      deepCrawl: options?.deepCrawl || false,
+      maxDepth,
+      errors: errors.slice(0, 10)  // 최대 10개 에러만 저장
+    }
   })
 
   return {
@@ -552,9 +1738,17 @@ export async function crawlChurchWebsite(
     churchId: church.id,
     structure,
     dictionary,
-    taxonomy: aiAnalysis.taxonomy || [],
+    taxonomy,
+    popups: allPopups,
     errors,
-    crawlTime: Date.now() - startTime
+    crawlTime: Date.now() - startTime,
+    progress: crawlProgress,
+    extendedInfo: {
+      contactsCount: (contacts?.phones.length || 0) + (contacts?.emails.length || 0),
+      socialMediaCount: Object.keys(socialMedia || {}).filter(k => k !== 'other' && (socialMedia as any)?.[k]).length,
+      mediaCount: (media?.bannerImages.length || 0) + (media?.galleryImages.length || 0) + (media?.videos.length || 0),
+      worshipTimesCount: worshipTimes.length
+    }
   }
 }
 
@@ -698,6 +1892,159 @@ async function saveCrawlResult(
   }
 
   await saveTaxonomy(taxonomy, null, 0, '')
+
+  // 확장 정보 저장
+  if (structure.contacts) {
+    // 기존 연락처 삭제
+    await db.from('church_contacts').delete().eq('church_id', churchId)
+
+    // 전화번호 저장
+    for (let i = 0; i < structure.contacts.phones.length; i++) {
+      await db.from('church_contacts').insert({
+        church_id: churchId,
+        contact_type: 'phone',
+        contact_value: structure.contacts.phones[i],
+        is_primary: i === 0
+      })
+    }
+
+    // 이메일 저장
+    for (let i = 0; i < structure.contacts.emails.length; i++) {
+      await db.from('church_contacts').insert({
+        church_id: churchId,
+        contact_type: 'email',
+        contact_value: structure.contacts.emails[i],
+        is_primary: i === 0
+      })
+    }
+
+    // 팩스 저장
+    if (structure.contacts.fax) {
+      await db.from('church_contacts').insert({
+        church_id: churchId,
+        contact_type: 'fax',
+        contact_value: structure.contacts.fax
+      })
+    }
+
+    // 교회 테이블 업데이트
+    const updateData: any = { updated_at: new Date().toISOString() }
+    if (structure.contacts.address) updateData.address = structure.contacts.address
+    if (structure.contacts.postalCode) updateData.postal_code = structure.contacts.postalCode
+    if (structure.contacts.phones.length > 0) updateData.phone = structure.contacts.phones[0]
+    if (structure.contacts.emails.length > 0) updateData.email = structure.contacts.emails[0]
+    if (structure.contacts.fax) updateData.fax = structure.contacts.fax
+
+    await db.from('churches').update(updateData).eq('id', churchId)
+  }
+
+  // 소셜 미디어 저장
+  if (structure.socialMedia) {
+    await db.from('church_social_media').delete().eq('church_id', churchId)
+
+    const socialEntries = [
+      { platform: 'youtube', url: structure.socialMedia.youtube },
+      { platform: 'facebook', url: structure.socialMedia.facebook },
+      { platform: 'instagram', url: structure.socialMedia.instagram },
+      { platform: 'twitter', url: structure.socialMedia.twitter },
+      { platform: 'blog', url: structure.socialMedia.blog },
+      { platform: 'kakao', url: structure.socialMedia.kakao },
+      { platform: 'naver_blog', url: structure.socialMedia.naverBlog },
+      { platform: 'naver_cafe', url: structure.socialMedia.naverCafe },
+      { platform: 'naver_tv', url: structure.socialMedia.naverTv }
+    ]
+
+    for (const entry of socialEntries) {
+      if (entry.url) {
+        await db.from('church_social_media').insert({
+          church_id: churchId,
+          platform: entry.platform,
+          url: entry.url
+        })
+      }
+    }
+  }
+
+  // 미디어 저장
+  if (structure.media) {
+    await db.from('church_media').delete().eq('church_id', churchId)
+
+    // 로고
+    if (structure.media.logo) {
+      await db.from('church_media').insert({
+        church_id: churchId,
+        media_type: 'logo',
+        url: structure.media.logo,
+        title: '교회 로고'
+      })
+
+      // 교회 테이블에도 로고 URL 업데이트
+      await db.from('churches').update({
+        logo_url: structure.media.logo,
+        updated_at: new Date().toISOString()
+      }).eq('id', churchId)
+    }
+
+    // 배너 이미지
+    for (let i = 0; i < structure.media.bannerImages.length; i++) {
+      await db.from('church_media').insert({
+        church_id: churchId,
+        media_type: 'banner',
+        url: structure.media.bannerImages[i],
+        sort_order: i
+      })
+    }
+
+    // 갤러리 이미지
+    for (let i = 0; i < structure.media.galleryImages.length; i++) {
+      await db.from('church_media').insert({
+        church_id: churchId,
+        media_type: 'gallery',
+        url: structure.media.galleryImages[i],
+        sort_order: i
+      })
+    }
+
+    // 비디오
+    for (const video of structure.media.videos) {
+      await db.from('church_media').insert({
+        church_id: churchId,
+        media_type: 'video',
+        url: video.url,
+        title: video.title,
+        platform: video.platform
+      })
+    }
+
+    // 문서
+    for (const doc of structure.media.documents) {
+      await db.from('church_media').insert({
+        church_id: churchId,
+        media_type: 'document',
+        url: doc.url,
+        title: doc.title,
+        file_type: doc.type
+      })
+    }
+  }
+
+  // 예배 시간 저장
+  if (structure.worshipTimes && structure.worshipTimes.length > 0) {
+    await db.from('church_worship_times').delete().eq('church_id', churchId)
+
+    for (let i = 0; i < structure.worshipTimes.length; i++) {
+      const wt = structure.worshipTimes[i]
+      await db.from('church_worship_times').insert({
+        church_id: churchId,
+        name: wt.name,
+        day_of_week: wt.day,
+        time_display: wt.time,
+        location: wt.location,
+        notes: wt.notes,
+        sort_order: i
+      })
+    }
+  }
 }
 
 // ============ 조회 함수 ============
