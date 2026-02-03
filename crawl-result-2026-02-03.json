@@ -1,0 +1,267 @@
+[
+  {
+    "churchCode": "klmc",
+    "churchName": "광림교회",
+    "success": true,
+    "crawlTime": 309449,
+    "navigationCount": 5,
+    "boardsCount": 23,
+    "dictionaryCount": 69,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "kumnan",
+    "churchName": "금란교회",
+    "success": false,
+    "crawlTime": 867,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 0,
+    "errorsCount": 1,
+    "error": "메인 페이지 접근 실패"
+  },
+  {
+    "churchCode": "flowergarden",
+    "churchName": "꽃동산교회",
+    "success": true,
+    "crawlTime": 53724,
+    "navigationCount": 9,
+    "boardsCount": 0,
+    "dictionaryCount": 25,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "sarangla",
+    "churchName": "남가주사랑의교회",
+    "success": true,
+    "crawlTime": 276766,
+    "navigationCount": 9,
+    "boardsCount": 0,
+    "dictionaryCount": 67,
+    "errorsCount": 13
+  },
+  {
+    "churchCode": "msch",
+    "churchName": "명성교회",
+    "success": true,
+    "crawlTime": 655231,
+    "navigationCount": 3,
+    "boardsCount": 0,
+    "dictionaryCount": 95,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "sarang",
+    "churchName": "사랑의교회",
+    "success": true,
+    "crawlTime": 849928,
+    "navigationCount": 13,
+    "boardsCount": 7,
+    "dictionaryCount": 445,
+    "errorsCount": 91
+  },
+  {
+    "churchCode": "samil",
+    "churchName": "삼일교회",
+    "success": false,
+    "crawlTime": 4,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 0,
+    "errorsCount": 1,
+    "error": "교회를 찾을 수 없습니다: samil"
+  },
+  {
+    "churchCode": "saeronam",
+    "churchName": "새로남교회",
+    "success": false,
+    "crawlTime": 2,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 0,
+    "errorsCount": 1,
+    "error": "교회를 찾을 수 없습니다: saeronam"
+  },
+  {
+    "churchCode": "saemoonan",
+    "churchName": "새문안교회",
+    "success": false,
+    "crawlTime": 2,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 0,
+    "errorsCount": 1,
+    "error": "교회를 찾을 수 없습니다: saemoonan"
+  },
+  {
+    "churchCode": "saeeden",
+    "churchName": "새에덴교회",
+    "success": true,
+    "crawlTime": 339781,
+    "navigationCount": 8,
+    "boardsCount": 0,
+    "dictionaryCount": 25,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "somang",
+    "churchName": "소망교회",
+    "success": true,
+    "crawlTime": 529675,
+    "navigationCount": 0,
+    "boardsCount": 9,
+    "dictionaryCount": 148,
+    "errorsCount": 1
+  },
+  {
+    "churchCode": "sooyoungro",
+    "churchName": "수영로교회",
+    "success": true,
+    "crawlTime": 22809,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 20,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "sungui",
+    "churchName": "숭의교회",
+    "success": false,
+    "crawlTime": 297,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 0,
+    "errorsCount": 1,
+    "error": "메인 페이지 접근 실패"
+  },
+  {
+    "churchCode": "shingil",
+    "churchName": "신길교회",
+    "success": true,
+    "crawlTime": 206975,
+    "navigationCount": 6,
+    "boardsCount": 0,
+    "dictionaryCount": 26,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "anyangjeil",
+    "churchName": "안양제일교회",
+    "success": true,
+    "crawlTime": 1007010,
+    "navigationCount": 8,
+    "boardsCount": 43,
+    "dictionaryCount": 262,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "fgtv",
+    "churchName": "여의도순복음교회",
+    "success": true,
+    "crawlTime": 79920,
+    "navigationCount": 4,
+    "boardsCount": 2,
+    "dictionaryCount": 43,
+    "errorsCount": 2
+  },
+  {
+    "churchCode": "yonsei",
+    "churchName": "연세중앙교회",
+    "success": true,
+    "crawlTime": 23835,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 13,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "youngnak",
+    "churchName": "영락교회",
+    "success": true,
+    "crawlTime": 320126,
+    "navigationCount": 2,
+    "boardsCount": 32,
+    "dictionaryCount": 119,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "oryun",
+    "churchName": "오륜교회",
+    "success": true,
+    "crawlTime": 57053,
+    "navigationCount": 1,
+    "boardsCount": 0,
+    "dictionaryCount": 20,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "onnuri",
+    "churchName": "온누리교회",
+    "success": true,
+    "crawlTime": 480105,
+    "navigationCount": 5,
+    "boardsCount": 42,
+    "dictionaryCount": 151,
+    "errorsCount": 1
+  },
+  {
+    "churchCode": "gntc",
+    "churchName": "은혜와진리교회",
+    "success": true,
+    "crawlTime": 325292,
+    "navigationCount": 1,
+    "boardsCount": 0,
+    "dictionaryCount": 60,
+    "errorsCount": 1
+  },
+  {
+    "churchCode": "incheonfgtv",
+    "churchName": "인천순복음교회",
+    "success": true,
+    "crawlTime": 227903,
+    "navigationCount": 7,
+    "boardsCount": 0,
+    "dictionaryCount": 25,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "bethel",
+    "churchName": "일산벧엘교회",
+    "success": true,
+    "crawlTime": 28917,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 15,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "juan",
+    "churchName": "주안장로교회",
+    "success": true,
+    "crawlTime": 30774,
+    "navigationCount": 0,
+    "boardsCount": 0,
+    "dictionaryCount": 15,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "jiguchon",
+    "churchName": "지구촌교회",
+    "success": true,
+    "crawlTime": 593778,
+    "navigationCount": 1,
+    "boardsCount": 81,
+    "dictionaryCount": 126,
+    "errorsCount": 0
+  },
+  {
+    "churchCode": "chunghyun",
+    "churchName": "충현교회",
+    "success": true,
+    "crawlTime": 8915301,
+    "navigationCount": 7,
+    "boardsCount": 0,
+    "dictionaryCount": 15,
+    "errorsCount": 93
+  }
+]

@@ -47,7 +47,10 @@ export async function GET() {
       })
     }
 
-    const settings = JSON.parse(data.value as string) as VoiceSettings
+    // value가 이미 객체인 경우와 문자열인 경우 모두 처리
+    const settings = (typeof data.value === 'string'
+      ? JSON.parse(data.value)
+      : data.value) as VoiceSettings
     return NextResponse.json({
       success: true,
       settings: {

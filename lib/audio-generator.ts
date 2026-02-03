@@ -40,7 +40,10 @@ async function getVoiceId(): Promise<string | null> {
       .single()
 
     if (!error && data) {
-      const settings = JSON.parse(data.value as string)
+      // value가 이미 객체인 경우와 문자열인 경우 모두 처리
+      const settings = typeof data.value === 'string'
+        ? JSON.parse(data.value)
+        : data.value
       return settings.voice_id || null
     }
   } catch (error) {
