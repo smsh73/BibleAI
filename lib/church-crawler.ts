@@ -207,6 +207,294 @@ async function fetchHTML(url: string): Promise<string | null> {
 }
 
 /**
+ * 메타 리다이렉트 감지 및 리다이렉트 URL 반환
+ * <meta http-equiv='Refresh' content='0; url=...'> 형식 처리
+ */
+function detectMetaRedirect(html: string, baseUrl: string): string | null {
+  const $ = cheerio.load(html)
+
+  // Meta refresh 태그 확인
+  const metaRefresh = $('meta[http-equiv="refresh"], meta[http-equiv="Refresh"]').attr('content')
+  if (metaRefresh) {
+    // content="0; url=http://example.com" 형식 파싱
+    const urlMatch = metaRefresh.match(/url=([^"'\s]+)/i)
+    if (urlMatch) {
+      const redirectUrl = urlMatch[1]
+      console.log(`[Crawler] 메타 리다이렉트 감지: ${redirectUrl}`)
+      return redirectUrl.startsWith('http') ? redirectUrl : normalizeUrl(redirectUrl, baseUrl)
+    }
+  }
+
+  return null
+}
+
+/**
+ * 인트로/랜딩 페이지 감지 및 실제 메인 페이지 URL 찾기
+ * 광림교회 등 인트로 비디오 페이지를 사용하는 사이트 처리
+ */
+function detectIntroPageAndGetMainUrl(html: string, baseUrl: string): string | null {
+  const $ = cheerio.load(html)
+
+  // 먼저 메타 리다이렉트 확인
+  const metaRedirectUrl = detectMetaRedirect(html, baseUrl)
+  if (metaRedirectUrl) {
+    return metaRedirectUrl
+  }
+
+  // 인트로 페이지 특징 감지
+  const hasNavigation = $('nav, #gnb, .gnb, .menu, header nav').length > 0
+  const hasMainContent = $('main, #content, .content, article').length > 0
+  const hasVideoIntro = $('.video_wrap, .intro-video, .main-video, [class*="intro"]').length > 0
+  const hasMinimalContent = $('body').text().trim().length < 500
+  const linkCount = $('a').length
+
+  // 인트로 페이지로 판단되는 경우
+  if (!hasNavigation && (hasVideoIntro || (hasMinimalContent && linkCount < 20))) {
+    console.log('[Crawler] 인트로 페이지 감지됨')
+
+    // 실제 메인 페이지 링크 찾기
+    const mainPagePatterns = [
+      'a[href*="index.do"]',
+      'a[href*="main.do"]',
+      'a[href*="/main/"]',
+      'a.btn-close',  // 광림교회 스타일
+      'a[href*="home"]',
+      '.video_content a',
+      '.intro-skip a',
+      '.skip-intro a'
+    ]
+
+    for (const pattern of mainPagePatterns) {
+      const $link = $(pattern).first()
+      if ($link.length > 0) {
+        const href = $link.attr('href')
+        if (href && !href.startsWith('javascript:') && !href.startsWith('#')) {
+          const mainUrl = normalizeUrl(href, baseUrl)
+          console.log(`[Crawler] 실제 메인 페이지 발견: ${mainUrl}`)
+          return mainUrl
+        }
+      }
+    }
+
+    // 패턴에 없는 경우 모든 링크에서 찾기
+    const allLinks: string[] = []
+    $('a').each((i, el) => {
+      const href = $(el).attr('href')
+      if (href && !href.startsWith('javascript:') && !href.startsWith('#') &&
+          (href.includes('index') || href.includes('main') || href.includes('home'))) {
+        allLinks.push(href)
+      }
+    })
+
+    if (allLinks.length > 0) {
+      const mainUrl = normalizeUrl(allLinks[0], baseUrl)
+      console.log(`[Crawler] 메인 페이지 후보 발견: ${mainUrl}`)
+      return mainUrl
+    }
+  }
+
+  return null
+}
+
+/**
+ * iframe 기반 사이트 감지 및 실제 콘텐츠 URL 반환
+ * 꽃동산교회 등 iframe으로 콘텐츠를 로드하는 사이트 처리
+ */
+function detectIframeAndGetContentUrl(html: string, baseUrl: string): string | null {
+  const $ = cheerio.load(html)
+
+  // 메인 콘텐츠가 iframe인지 확인
+  const $mainIframe = $('iframe#mainFrame, iframe[name="mainFrame"], .mainLayer iframe, body > div > iframe').first()
+
+  if ($mainIframe.length > 0) {
+    const src = $mainIframe.attr('src')
+    if (src) {
+      console.log(`[Crawler] iframe 기반 사이트 감지: ${src}`)
+      return normalizeUrl(src, baseUrl)
+    }
+  }
+
+  // 전체 페이지가 거의 iframe만 있는 경우
+  const bodyText = $('body').text().trim()
+  const $iframes = $('iframe')
+  if (bodyText.length < 200 && $iframes.length > 0) {
+    const src = $iframes.first().attr('src')
+    if (src && !src.includes('youtube') && !src.includes('vimeo')) {
+      console.log(`[Crawler] iframe 전용 페이지 감지: ${src}`)
+      return normalizeUrl(src, baseUrl)
+    }
+  }
+
+  return null
+}
+
+/**
+ * XML 메뉴 파일에서 네비게이션 추출
+ * 꽃동산교회 등 XML 기반 메뉴 사용 사이트 처리
+ */
+async function parseXMLMenu(xmlUrl: string, baseUrl: string): Promise<PageInfo[]> {
+  const navigation: PageInfo[] = []
+
+  try {
+    const xmlContent = await fetchHTML(xmlUrl)
+    if (!xmlContent) return navigation
+
+    const $ = cheerio.load(xmlContent, { xmlMode: true })
+
+    // Base64 디코딩 함수
+    const decodeBase64 = (str: string): string => {
+      try {
+        return Buffer.from(str, 'base64').toString('utf8')
+      } catch {
+        return str
+      }
+    }
+
+    // depth1 메뉴 파싱
+    $('depth1').each((i, depth1El) => {
+      const $depth1 = $(depth1El)
+      const name = decodeBase64($depth1.attr('name') || '')
+      const link = decodeURIComponent($depth1.attr('link') || '')
+      const isDisplay = $depth1.attr('isDisplay')
+
+      if (isDisplay === 'N' || !name) return
+
+      const menuItem: PageInfo = {
+        url: link ? normalizeUrl(link, baseUrl) : '',
+        title: name,
+        pageType: 'menu',
+        depth: 1,
+        children: []
+      }
+
+      // depth2 메뉴 파싱
+      $depth1.find('depth2').each((j, depth2El) => {
+        const $depth2 = $(depth2El)
+        const subName = decodeBase64($depth2.attr('name') || '')
+        const subLink = decodeURIComponent($depth2.attr('link') || '')
+        const subDisplay = $depth2.attr('isDisplay')
+
+        if (subDisplay === 'N' || !subName) return
+
+        const subMenuItem: PageInfo = {
+          url: subLink ? normalizeUrl(subLink, baseUrl) : '',
+          title: subName,
+          pageType: 'submenu',
+          depth: 2,
+          parentUrl: menuItem.url,
+          children: []
+        }
+
+        // depth3 메뉴 파싱
+        $depth2.find('depth3').each((k, depth3El) => {
+          const $depth3 = $(depth3El)
+          const thirdName = decodeBase64($depth3.attr('name') || '')
+          const thirdLink = decodeURIComponent($depth3.attr('link') || '')
+          const thirdDisplay = $depth3.attr('isDisplay')
+
+          if (thirdDisplay === 'N' || !thirdName) return
+
+          subMenuItem.children?.push({
+            url: thirdLink ? normalizeUrl(thirdLink, baseUrl) : '',
+            title: thirdName,
+            pageType: 'content',
+            depth: 3,
+            parentUrl: subMenuItem.url
+          })
+        })
+
+        menuItem.children?.push(subMenuItem)
+      })
+
+      navigation.push(menuItem)
+    })
+
+    if (navigation.length > 0) {
+      console.log(`[Crawler] XML 메뉴에서 ${navigation.length}개 1차 메뉴 추출`)
+    }
+  } catch (error: any) {
+    console.error(`[Crawler] XML 메뉴 파싱 오류: ${error.message}`)
+  }
+
+  return navigation
+}
+
+/**
+ * XML 메뉴 파일 URL 감지
+ */
+async function detectXMLMenuUrl(html: string, baseUrl: string): Promise<string | null> {
+  // JavaScript 코드에서 XML 메뉴 경로 찾기
+  const xmlPatterns = [
+    /xmlFile\s*=\s*["']([^"']+\.xml[^"']*)/,
+    /menu\.xml/,
+    /sitemap\.xml/
+  ]
+
+  for (const pattern of xmlPatterns) {
+    const match = html.match(pattern)
+    if (match) {
+      const xmlPath = match[1] || match[0]
+      return normalizeUrl(xmlPath, baseUrl)
+    }
+  }
+
+  const $ = cheerio.load(html)
+  const scripts = $('script').text()
+
+  // 일반적인 XML 메뉴 경로 시도
+  const commonPaths = [
+    '/core/xml/menu.xml.html',
+    '/xml/menu.xml',
+    '/data/menu.xml'
+  ]
+
+  for (const path of commonPaths) {
+    if (scripts.includes(path) || scripts.includes(path.replace(/\//g, '\\/'))) {
+      return normalizeUrl(path, baseUrl)
+    }
+  }
+
+  // menu.js 스크립트 파일이 있는지 확인하고 해당 파일에서 XML 경로 찾기
+  const menuScriptSrc = $('script[src*="menu"]').attr('src')
+  if (menuScriptSrc) {
+    try {
+      const menuScriptUrl = normalizeUrl(menuScriptSrc, baseUrl)
+      const menuScriptContent = await fetchHTML(menuScriptUrl)
+      if (menuScriptContent) {
+        const xmlFileMatch = menuScriptContent.match(/this\.xmlFile\s*=\s*["']([^"']+)["']/) ||
+                            menuScriptContent.match(/xmlFile\s*=\s*["']([^"']+)["']/)
+        if (xmlFileMatch) {
+          const xmlPath = xmlFileMatch[1]
+          console.log(`[Crawler] menu.js에서 XML 경로 발견: ${xmlPath}`)
+          return normalizeUrl(xmlPath, baseUrl)
+        }
+      }
+    } catch (e) {
+      // 무시
+    }
+  }
+
+  // 일반적인 XML 메뉴 경로 직접 시도 (마지막 수단)
+  for (const path of commonPaths) {
+    try {
+      const testUrl = normalizeUrl(path, baseUrl)
+      const response = await fetch(testUrl, {
+        method: 'HEAD',
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      })
+      if (response.ok) {
+        console.log(`[Crawler] XML 메뉴 파일 발견: ${testUrl}`)
+        return testUrl
+      }
+    } catch (e) {
+      // 무시
+    }
+  }
+
+  return null
+}
+
+/**
  * URL 정규화
  */
 function normalizeUrl(url: string, baseUrl: string): string {
@@ -268,20 +556,26 @@ function extractNavigation(html: string, baseUrl: string): PageInfo[] {
     '.menu-wrap', '.nav-wrap', '.gnb-wrap', '#gnb-wrap',
     // 사랑의교회, 온누리교회 등
     '.header-menu', '.header_menu', '.top-nav', '#top-nav',
-    '.allmenu', '#all-menu', '.all-menu'
+    '.allmenu', '#all-menu', '.all-menu',
+    // 광림교회 스타일
+    'ul.gnb-ul', '.gnb-ul'
   ]
 
   // 2. 서브메뉴 선택자들
   const subMenuSelectors = [
     '> ul > li', '> .sub > li', '> .submenu > li', '> .sub-menu > li',
     '> .depth2 > li', '> ul.depth2 > li', '> div > ul > li',
-    '> .sub-wrap > ul > li', '> .gnb-sub > li', '> .lnb > li'
+    '> .sub-wrap > ul > li', '> .gnb-sub > li', '> .lnb > li',
+    // 광림교회 스타일
+    '> .gnb-inner > .sub-mn > li', '.gnb-inner .sub-mn > li'
   ]
 
   // 3. 3차 메뉴 선택자들
   const thirdLevelSelectors = [
     '> ul > li', '> .sub > li', '> .depth3 > li', '> ul.depth3 > li',
-    '> .third-menu > li', '> div > ul > li'
+    '> .third-menu > li', '> div > ul > li',
+    // 광림교회 스타일
+    '> .sub-mn02 > li', '.sub-mn02 > li'
   ]
 
   // 헬퍼: 메뉴 아이템 생성
@@ -303,7 +597,7 @@ function extractNavigation(html: string, baseUrl: string): PageInfo[] {
   }
 
   // 헬퍼: 링크 텍스트 추출
-  function getLinkText($link: cheerio.Cheerio<cheerio.Element>): string {
+  function getLinkText($link: cheerio.Cheerio<any>): string {
     // span, strong 등 내부 요소 텍스트 우선
     const spanText = $link.find('span, strong, em').first().text().trim()
     if (spanText) return spanText
@@ -601,10 +895,13 @@ function extractNavigation(html: string, baseUrl: string): PageInfo[] {
                         `메뉴 ${i + 1}`
 
       // 기존 네비게이션에서 해당 메뉴 찾기
-      let menuItem = navigation.find(n => n.title === panelTitle)
+      let menuItem: PageInfo | undefined = navigation.find(n => n.title === panelTitle)
       if (!menuItem) {
-        menuItem = createMenuItem('', panelTitle, 1)
-        if (menuItem) navigation.push(menuItem)
+        const newItem = createMenuItem('', panelTitle, 1)
+        if (newItem) {
+          navigation.push(newItem)
+          menuItem = newItem
+        }
       }
       if (!menuItem) return
 
@@ -720,7 +1017,7 @@ function detectPopups(html: string, baseUrl: string): PopupInfo[] {
             url,
             title,
             triggerType: 'data-url',
-            triggerElement: el.tagName
+            triggerElement: (el as any).tagName || 'unknown'
           })
         }
       }
@@ -783,7 +1080,7 @@ function extractLinksFromPage(html: string, baseUrl: string, currentDepth: numbe
     '.sub-content', '.page-content', '#sub', '.sub'
   ]
 
-  let $content = $('body')
+  let $content: cheerio.Cheerio<any> = $('body')
   for (const selector of contentSelectors) {
     const $found = $(selector)
     if ($found.length > 0) {
@@ -935,11 +1232,57 @@ async function deepCrawlPages(
         }
       }
 
-      // 인물 정보 페이지면 사전에 추가
-      const peopleKeywords = ['목사', '장로', '전도사', '사역자', '교역자', '집사', '권사']
-      if (peopleKeywords.some(kw => page.title.includes(kw) || page.url.includes(kw))) {
+      // 인물 정보 페이지면 AI로 상세 추출
+      const peopleKeywords = [
+        // 직분 관련
+        '목사', '장로', '전도사', '사역자', '교역자', '집사', '권사', '담임',
+        // 페이지 유형 관련
+        '소개', '인사', '교역', '섬기는', '직원', 'staff', 'pastor', 'minister',
+        'greetings', 'introduction', 'about', 'leadership', 'team'
+      ]
+      const pageText = (page.title + ' ' + page.url).toLowerCase()
+      if (peopleKeywords.some(kw => pageText.includes(kw.toLowerCase()))) {
         const people = await extractPeopleFromPage(html, page.url, '인물')
         dictionary.push(...people)
+        console.log(`[DeepCrawl] 인물 정보 추출: ${page.title} - ${people.length}명`)
+      }
+
+      // 조직/부서 정보 페이지 감지 및 추출
+      const orgKeywords = [
+        // 조직 구조 관련
+        '조직', '기구', '부서', '사역', 'organization', 'ministry', 'department', 'org',
+        // 부서 유형
+        '선교부', '교육부', '찬양', '미디어', '복지', '긍휼', '양육', '전도', '봉사',
+        '서무', '총무', '기획', '재정', '관리',
+        // 교구/지역 조직
+        '교구', '권역', '구역', '셀', '목장', '소그룹', 'district', 'cell', 'zone',
+        // 페이지 유형
+        '각부서', '부서안내', '사역팀', '사역안내', '조직안내', '조직도',
+        '봉사팀', '봉사부서', 'ministries', 'departments', 'teams'
+      ]
+
+      if (orgKeywords.some(kw => pageText.includes(kw.toLowerCase()))) {
+        console.log(`[DeepCrawl] 조직/부서 페이지 감지: ${page.title}`)
+        // 해당 페이지에서 부서/조직 정보 추출
+        const orgDict = extractOrganizationFromPage(html, page.url)
+        // 중복 제거하며 추가
+        for (const entry of orgDict) {
+          if (!dictionary.some(d => d.term === entry.term && d.category === entry.category)) {
+            dictionary.push(entry)
+          }
+        }
+        console.log(`[DeepCrawl] 조직/부서 정보 추출: ${page.title} - ${orgDict.length}개`)
+      }
+
+      // 모든 페이지에서 HTML 패턴 기반 사전 추출 시도 (10페이지마다)
+      if (crawledCount % 10 === 1 || page.depth === 1) {
+        const pageDict = extractDictionaryFromHTML(html, page.url)
+        // 중복 제거하며 추가
+        for (const entry of pageDict) {
+          if (!dictionary.some(d => d.term === entry.term && d.category === entry.category)) {
+            dictionary.push(entry)
+          }
+        }
       }
 
       crawledPages.push(page)
@@ -1410,11 +1753,13 @@ async function analyzeStructureWithAI(html: string, url: string): Promise<{
   dictionary: DictionaryEntry[]
   taxonomy: TaxonomyNode[]
 }> {
-  const prompt = `다음은 한국 교회 홈페이지의 HTML입니다. 이 사이트의 구조를 분석해주세요.
+  const prompt = `다음은 한국 교회 홈페이지의 HTML입니다. 이 사이트의 구조를 분석하고 **반드시 dictionary 정보를 추출**해주세요.
 
 URL: ${url}
 HTML (일부):
 ${html.substring(0, 15000)}
+
+⚠️ 중요: dictionary 필드는 **반드시 1개 이상의 항목**을 포함해야 합니다. 빈 배열은 허용되지 않습니다.
 
 다음 정보를 JSON 형식으로 추출해주세요:
 
@@ -1422,27 +1767,68 @@ ${html.substring(0, 15000)}
    - 1차, 2차, 3차 메뉴 계층 구조
    - 각 메뉴의 URL, 제목
 
-2. **dictionary**: 교회 관련 용어/사전
-   - 인물: 목사, 장로, 전도사 이름과 직분
-   - 장소: 예배당, 교육관, 홀 등
-   - 부서/사역: 교구, 선교회, 청년부 등
-   - 행사: 정기 행사, 특별 행사 등
+2. **dictionary**: 교회 관련 용어/사전 (⭐ 필수 - 반드시 추출!)
+   HTML에서 다음 정보를 적극적으로 찾아서 추출하세요:
+
+   a) **인물** (category: "인물"):
+      - 목사, 장로, 전도사, 집사, 권사 이름과 직분
+      - 담임목사, 부목사, 교육목사 등
+      - HTML에서 "OOO 목사", "OOO 장로" 패턴 찾기
+      - subcategory에 직분 기재 (담임목사, 장로, 전도사 등)
+
+   b) **부서/사역부서** (category: "부서"):
+      - 행정 부서: 서무부, 총무부, 기획부, 재정부, 관리부, 시설관리부 등
+      - 선교 부서: 국제선교부, 국내선교부, 해외선교부, 선교회 등
+      - 교육 부서: 교육부, 유아부, 유년부, 초등부, 소년부, 중등부, 고등부, 청소년부, 대학부, 청년부, 장년부 등
+      - 돌봄/긍휼 사역: 긍휼사역부, 봉사부, 복지사역부, 장애인사역부(농인부, 실로암부, 사랑부) 등
+      - 홍보/미디어: 홍보출판부, 신문사, 미디어사역부, 영상부, 방송팀 등
+      - 찬양/음악: 찬양사역부, 성가대, 찬양대, 찬양단, 워십팀 등
+      - 전도/양육: 전도부, 신앙양육부, 제자훈련부, 새신자부 등
+      - 기타: 역사편찬부, 안내부, 주차팀, 기도부 등
+      - subcategory에 부서 유형 기재 (선교, 교육, 찬양/음악, 미디어/홍보, 돌봄/긍휼, 전도/양육, 행정 등)
+
+   c) **교구/조직** (category: "조직"):
+      - 성경 지명 기반 교구: 베들레헴, 예루살렘, 빌립보, 서머나, 안디옥, 에베소, 골로새, 갈릴리 등
+      - 일반 교구: 젊은부부교구, 신혼부부교구, 장년교구, 제1교구, 제2교구, A교구 등
+      - 권역: 동부권, 서부권, 남부권, 북부권 등
+      - 소그룹: 구역, 셀, 목장, 순, 다락방, 가정교회 등
+      - subcategory에 조직 유형 기재 (교구, 권역, 소그룹 등)
+
+   d) **지원조직** (category: "조직"):
+      - 남선교회, 여선교회, 청년회, 학생회 등
+
+   e) **장소** (category: "장소"):
+      - 대예배실, 소예배실, 교육관, 친교실 등
+      - 건물명, 층수, 홀 이름 등
+
+   f) **행사** (category: "행사"):
+      - 주일예배, 수요예배, 새벽기도 등 정기 행사
+      - 부활절, 성탄절, 추수감사절 특별 행사
+      - 수련회, 세미나, 바자회 등
+
+   g) **프로그램** (category: "프로그램"):
+      - 성경공부, 제자훈련, 양육과정 등
+      - 교회학교, 주일학교 프로그램
 
 3. **taxonomy**: 조직 분류 체계
    - 조직 구조 (교구 > 구역 > 속회)
    - 사역 분류 (예배, 교육, 선교 등)
+   - 부서 계층 구조 (상위부서 > 하위부서)
 
 4. **metadata**: 사이트 메타정보
-   - 교회명
-   - 로고 URL
-   - 연락처
-   - 주소
-   - 기술 스택 (사용된 프레임워크 등)
+   - 교회명, 로고 URL, 연락처, 주소
 
-JSON 형식으로만 응답해주세요:
+JSON 형식으로만 응답 (주석 없이):
 {
   "navigation": [...],
-  "dictionary": [...],
+  "dictionary": [
+    {"term": "홍길동", "category": "인물", "subcategory": "담임목사", "definition": "교회 담임목사"},
+    {"term": "국제선교부", "category": "부서", "subcategory": "선교", "definition": "해외 선교 사역 담당"},
+    {"term": "청년부", "category": "부서", "subcategory": "교육", "definition": "20-30대 청년 사역"},
+    {"term": "베들레헴교구", "category": "조직", "subcategory": "교구", "definition": "성경 지명 기반 교구"},
+    {"term": "찬양사역부", "category": "부서", "subcategory": "찬양/음악", "definition": "성가대, 찬양단 총괄"},
+    ...최소 10개 이상
+  ],
   "taxonomy": [...],
   "metadata": {...}
 }`
@@ -1522,6 +1908,407 @@ JSON 배열 형식으로 응답:
   return []
 }
 
+/**
+ * 조직/부서 페이지에서 상세 정보 추출
+ * 네비게이션 메뉴, 테이블, 목록 등에서 지능적으로 추출
+ */
+function extractOrganizationFromPage(html: string, pageUrl: string): DictionaryEntry[] {
+  const $ = cheerio.load(html)
+  const dictionary: DictionaryEntry[] = []
+  const seenTerms = new Set<string>()
+
+  // 1. 사역부서 패턴 (광림교회 등 대형교회 기준)
+  const ministryPatterns = [
+    // 행정 부서
+    /서무부|총무부|기획부|재정부|회계부|관리부|시설부|시설관리부/g,
+    // 선교 부서
+    /국제선교부|국내선교부|선교부|해외선교부|지역선교부|선교회|선교팀/g,
+    // 교육 부서 (하위 부서 포함)
+    /교육부|유아부|영아부|유년부|초등부|소년부|중등부|고등부|청소년부|대학부|청년부|장년부|싱글부|새가족부|양육부|어린이부|유치부|아동부|학생부|유스부|청장년부/g,
+    // 돌봄/긍휼 사역
+    /긍휼사역부|사회봉사부|봉사부|구제부|복지사역부|복지부|장애인사역부|농인부|실로암부|사랑부|장애인부|노인부|경로부|실버부/g,
+    // 홍보/미디어
+    /홍보출판부|홍보부|출판부|신문사|방송부|미디어사역부|미디어부|영상부|영상팀|방송팀|음향팀|촬영팀|뉴미디어팀/g,
+    // 찬양/음악
+    /찬양사역부|찬양부|성가대|찬양대|찬양단|음악부|워십팀|워십밴드|찬양팀/g,
+    // 전도/양육
+    /전도부|전도회|전도팀|신앙양육부|양육팀|제자훈련부|새신자부|새신자팀|등록팀/g,
+    // 역사/기록
+    /역사편찬부|역사부|기록부|자료실/g,
+    // 기타
+    /안내부|안내팀|주차팀|환경부|시설팀|경비팀|기도부|중보기도부|새벽기도팀|통역팀|번역팀/g
+  ]
+
+  // 2. 교구/지역 조직 패턴
+  const districtPatterns = [
+    // 성경 지명 기반 교구
+    /베들레헴교구?|예루살렘교구?|빌립보교구?|서머나교구?|안디옥교구?|에베소교구?|골로새교구?/g,
+    /갈릴리교구?|유다교구?|사마리아교구?|브엘세바교구?|나사렛교구?|벧엘교구?|실로교구?/g,
+    /가버나움교구?|고린도교구?|로마교구?|데살로니가교구?|갈라디아교구?/g,
+    /빌라델비아교구?|버가모교구?|두아디라교구?|사데교구?|라오디게아교구?/g,
+    // 일반 교구
+    /젊은부부교구|신혼부부교구|장년교구|청년교구|부부교구/g,
+    /제?[1-9]교구|[A-Z]교구/g,
+    // 권역/구역
+    /동부권|서부권|남부권|북부권|중부권|강남권|강북권|강서권|강동권/g
+  ]
+
+  // 3. 소그룹 패턴
+  const smallGroupPatterns = [
+    /[가-힣]+구역|[가-힣]+셀|[가-힣]+목장|[가-힣]+순|[가-힣]+다락방/g,
+    /남선교회|여선교회|청년회|학생회|직장인모임|가정교회|열린모임|나눔방/g
+  ]
+
+  const bodyText = $('body').text()
+
+  // 부서 패턴 추출
+  for (const pattern of ministryPatterns) {
+    let match
+    while ((match = pattern.exec(bodyText)) !== null) {
+      const dept = match[0]
+      if (!seenTerms.has(dept)) {
+        seenTerms.add(dept)
+        dictionary.push({
+          term: dept,
+          category: '부서',
+          subcategory: categorizeDepartment(dept),
+          definition: dept,
+          sourceUrl: pageUrl
+        })
+      }
+    }
+  }
+
+  // 교구 패턴 추출
+  for (const pattern of districtPatterns) {
+    let match
+    while ((match = pattern.exec(bodyText)) !== null) {
+      const district = match[0]
+      if (!seenTerms.has(district)) {
+        seenTerms.add(district)
+        dictionary.push({
+          term: district,
+          category: '조직',
+          subcategory: '교구',
+          definition: district,
+          sourceUrl: pageUrl
+        })
+      }
+    }
+  }
+
+  // 소그룹 패턴 추출
+  for (const pattern of smallGroupPatterns) {
+    let match
+    while ((match = pattern.exec(bodyText)) !== null) {
+      const group = match[0]
+      if (!seenTerms.has(group) && group.length >= 3 && group.length <= 15) {
+        seenTerms.add(group)
+        dictionary.push({
+          term: group,
+          category: '조직',
+          subcategory: '소그룹',
+          definition: group,
+          sourceUrl: pageUrl
+        })
+      }
+    }
+  }
+
+  // 4. 네비게이션/메뉴에서 추가 추출
+  const menuSelectors = [
+    'nav a', '.menu a', '.gnb a', '.lnb a', '.snb a',
+    'ul.menu li a', '.sub-menu a', '.submenu a',
+    '[class*="menu"] a', '[class*="nav"] a', '[class*="org"] a',
+    '.dept-list a', '.ministry-list a'
+  ]
+
+  for (const selector of menuSelectors) {
+    $(selector).each((_, el) => {
+      const text = $(el).text().trim()
+      const href = $(el).attr('href') || ''
+
+      // 부서/조직 관련 메뉴 항목인지 확인
+      if (text.length >= 2 && text.length <= 20) {
+        // XX부, XX팀, XX회, XX교구, XX권역 패턴
+        const deptMatch = text.match(/([가-힣]+)(부|팀|회|사역|사역부|교구|권역|구역)/)
+        if (deptMatch && !seenTerms.has(text)) {
+          const excludeWords = ['예배부분', '전체부분', '해당부분', '일부분']
+          if (!excludeWords.some(w => text.includes(w))) {
+            seenTerms.add(text)
+            const category = text.includes('교구') || text.includes('권역') || text.includes('구역') ? '조직' : '부서'
+            dictionary.push({
+              term: text,
+              category,
+              subcategory: categorizeDepartment(text),
+              definition: text,
+              sourceUrl: href ? new URL(href, pageUrl).href : pageUrl
+            })
+          }
+        }
+      }
+    })
+  }
+
+  // 5. 테이블/목록에서 구조화된 정보 추출
+  $('table tr, .org-chart li, .ministry-list li, ul.dept li').each((_, el) => {
+    const text = $(el).text().trim()
+    // 부서명 + 담당자 또는 설명 패턴
+    const deptInfoMatch = text.match(/([가-힣]+(?:부|팀|회|사역부?))\s*[:\-]\s*(.+)/)
+    if (deptInfoMatch && !seenTerms.has(deptInfoMatch[1])) {
+      seenTerms.add(deptInfoMatch[1])
+      dictionary.push({
+        term: deptInfoMatch[1],
+        category: '부서',
+        subcategory: categorizeDepartment(deptInfoMatch[1]),
+        definition: deptInfoMatch[2].substring(0, 100),
+        sourceUrl: pageUrl
+      })
+    }
+  })
+
+  console.log(`[Crawler] 조직/부서 페이지 추출: ${dictionary.length}개 (${pageUrl})`)
+  return dictionary
+}
+
+/**
+ * 부서명에서 카테고리 추정
+ */
+function categorizeDepartment(deptName: string): string {
+  if (deptName.includes('선교')) return '선교'
+  if (deptName.includes('교육') || ['유아', '유년', '초등', '소년', '중등', '고등', '청소년', '대학', '청년', '장년'].some(d => deptName.includes(d))) return '교육'
+  if (deptName.includes('찬양') || deptName.includes('성가') || deptName.includes('음악') || deptName.includes('워십')) return '찬양/음악'
+  if (deptName.includes('미디어') || deptName.includes('홍보') || deptName.includes('방송') || deptName.includes('영상') || deptName.includes('출판')) return '미디어/홍보'
+  if (deptName.includes('복지') || deptName.includes('긍휼') || deptName.includes('봉사') || deptName.includes('장애인') || deptName.includes('구제')) return '돌봄/긍휼'
+  if (deptName.includes('전도') || deptName.includes('양육') || deptName.includes('새신자') || deptName.includes('제자')) return '전도/양육'
+  if (deptName.includes('기도')) return '기도'
+  if (deptName.includes('안내') || deptName.includes('주차') || deptName.includes('환경') || deptName.includes('시설')) return '봉사'
+  if (deptName.includes('교구') || deptName.includes('권역')) return '교구'
+  if (deptName.includes('구역') || deptName.includes('셀') || deptName.includes('목장')) return '소그룹'
+  if (deptName.includes('서무') || deptName.includes('총무') || deptName.includes('기획') || deptName.includes('재정')) return '행정'
+  return ''
+}
+
+/**
+ * HTML에서 패턴 기반으로 사전 항목 추출 (AI 폴백용)
+ */
+function extractDictionaryFromHTML(html: string, baseUrl: string): DictionaryEntry[] {
+  const $ = cheerio.load(html)
+  const dictionary: DictionaryEntry[] = []
+  const seenTerms = new Set<string>()
+
+  // 1. 인물 패턴 추출 (이름 + 직분)
+  const personPatterns = [
+    /([가-힣]{2,4})\s*(담임목사|원로목사|부목사|교육목사|청년목사|목사|장로|권사|집사|전도사|사모)/g,
+    /(담임목사|원로목사|부목사|교육목사|청년목사|목사|장로|권사|집사|전도사)\s*([가-힣]{2,4})/g
+  ]
+
+  const bodyText = $('body').text()
+
+  for (const pattern of personPatterns) {
+    let match
+    while ((match = pattern.exec(bodyText)) !== null) {
+      const name = match[1].length <= 4 ? match[1] : match[2]
+      const position = match[1].length > 4 ? match[1] : match[2]
+
+      // 이름이 2-4자인지, 실제 이름 패턴인지 확인
+      if (name && name.length >= 2 && name.length <= 4 && !seenTerms.has(name)) {
+        // 일반적인 단어가 아닌지 확인
+        const commonWords = ['교회', '예배', '성경', '찬양', '기도', '말씀', '은혜', '사랑', '감사']
+        if (!commonWords.includes(name)) {
+          seenTerms.add(name)
+          dictionary.push({
+            term: name,
+            category: '인물',
+            subcategory: position,
+            definition: `${position}`,
+            sourceUrl: baseUrl
+          })
+        }
+      }
+    }
+  }
+
+  // 2. 부서/사역 패턴 추출 (대폭 확장)
+  const departmentSelectors = [
+    'nav a', '.menu a', '.gnb a', '.lnb a', '.snb a',
+    '[class*="dept"] a', '[class*="ministry"] a', '[class*="org"] a',
+    'h2', 'h3', 'h4', 'h5', '.title', '.tit',
+    'li a', 'ul a', '.sub-menu a', '.submenu a',
+    '[class*="menu"] a', '[class*="nav"] a'
+  ]
+
+  // 사역부서 패턴 (광림교회 등 대형교회 기준 확장)
+  const ministryDepartments = [
+    // 행정/서무 부서
+    '서무부', '총무부', '기획부', '재정부', '회계부', '관리부', '시설부', '시설관리부',
+    // 선교부
+    '국제선교부', '국내선교부', '선교부', '해외선교부', '지역선교부', '선교회',
+    // 교육부서
+    '교육부', '유아부', '유년부', '초등부', '소년부', '중등부', '고등부', '청소년부',
+    '대학부', '청년부', '장년부', '싱글부', '청장년부', '새가족부', '양육부',
+    '유스부', '어린이부', '유치부', '영아부', '아동부', '학생부',
+    // 돌봄/긍휼 사역
+    '긍휼사역부', '사회봉사부', '봉사부', '구제부', '복지사역부', '복지부',
+    '장애인사역부', '농인부', '실로암부', '사랑부', '장애인부',
+    '요양원사역', '호스피스', '노인부', '경로부', '실버부',
+    // 홍보/출판
+    '홍보출판부', '홍보부', '출판부', '신문사', '방송부', '미디어사역부', '미디어부',
+    '영상부', '영상팀', '방송팀', '음향팀', '촬영팀', '뉴미디어팀',
+    // 찬양/음악
+    '찬양사역부', '찬양부', '성가대', '찬양대', '찬양단', '음악부',
+    '워십팀', '워십밴드', '찬양팀', 'CCM팀',
+    // 전도/양육
+    '전도부', '전도회', '전도팀', '신앙양육부', '양육팀', '제자훈련부',
+    '새신자부', '새신자팀', '등록팀',
+    // 역사/기록
+    '역사편찬부', '역사부', '기록부', '자료실',
+    // 기타 사역부
+    '안내부', '안내팀', '주차팀', '환경부', '시설팀', '경비팀',
+    '기도부', '중보기도부', '새벽기도팀', '통역팀', '번역팀'
+  ]
+
+  // 교구/지역 패턴 (성경 지명 기반 + 일반)
+  const districtPatterns = [
+    // 성경 지명 기반 교구
+    '베들레헴', '예루살렘', '빌립보', '서머나', '안디옥', '에베소', '골로새',
+    '갈릴리', '유다', '사마리아', '브엘세바', '나사렛', '벧엘', '실로',
+    '가버나움', '고린도', '로마', '데살로니가', '갈라디아', '빌라델비아',
+    '버가모', '두아디라', '사데', '라오디게아',
+    // 일반 교구 패턴
+    '젊은부부교구', '신혼부부교구', '장년교구', '청년교구', '부부교구',
+    '1교구', '2교구', '3교구', '4교구', '5교구', '6교구', '7교구', '8교구',
+    '제1교구', '제2교구', '제3교구', '제4교구', '제5교구',
+    'A교구', 'B교구', 'C교구', 'D교구', 'E교구',
+    // 권역/구역
+    '동부권', '서부권', '남부권', '북부권', '중부권',
+    '강남권', '강북권', '강서권', '강동권'
+  ]
+
+  // 소그룹/셀 패턴
+  const smallGroupPatterns = [
+    '구역', '셀', '목장', '순', '다락방', '소그룹', 'EM', 'MC', 'GBS',
+    '가정교회', '열린모임', '나눔방', '큐티모임', 'QT모임',
+    '남선교회', '여선교회', '청년회', '학생회', '직장인모임'
+  ]
+
+  // 모든 부서 패턴 합치기
+  const allDepartmentPatterns = [...ministryDepartments, ...districtPatterns, ...smallGroupPatterns]
+
+  for (const selector of departmentSelectors) {
+    $(selector).each((_, el) => {
+      const text = $(el).text().trim()
+      const href = $(el).attr('href') || ''
+
+      for (const dept of allDepartmentPatterns) {
+        if (text.includes(dept) && text.length < 50 && !seenTerms.has(dept)) {
+          seenTerms.add(dept)
+
+          // 카테고리 분류
+          let category = '부서'
+          let subcategory = ''
+
+          if (districtPatterns.includes(dept)) {
+            category = '조직'
+            subcategory = '교구'
+          } else if (smallGroupPatterns.includes(dept)) {
+            category = '조직'
+            subcategory = '소그룹'
+          } else if (dept.includes('선교')) {
+            subcategory = '선교'
+          } else if (dept.includes('교육') || ['유아부', '유년부', '초등부', '소년부', '중등부', '고등부', '청소년부', '대학부', '청년부'].some(d => dept.includes(d))) {
+            subcategory = '교육'
+          } else if (dept.includes('찬양') || dept.includes('성가') || dept.includes('음악')) {
+            subcategory = '찬양/음악'
+          } else if (dept.includes('미디어') || dept.includes('홍보') || dept.includes('방송') || dept.includes('영상')) {
+            subcategory = '미디어/홍보'
+          } else if (dept.includes('복지') || dept.includes('긍휼') || dept.includes('봉사') || dept.includes('장애인')) {
+            subcategory = '돌봄/긍휼'
+          }
+
+          dictionary.push({
+            term: dept,
+            category,
+            subcategory: subcategory || undefined,
+            definition: text.length < 80 ? text : dept,
+            sourceUrl: href ? new URL(href, baseUrl).href : baseUrl
+          })
+        }
+      }
+    })
+  }
+
+  // 2-1. 동적 부서명 패턴 추출 (XX부, XX팀, XX회 형식)
+  const dynamicDeptPattern = /([가-힣]{2,8})(부|팀|회|사역|사역부|사역팀|교구|권역|구역)\b/g
+  let deptMatch
+  while ((deptMatch = dynamicDeptPattern.exec(bodyText)) !== null) {
+    const fullDept = deptMatch[0]
+    // 일반적인 단어 제외
+    const excludeWords = ['예배부', '전체부', '기타부', '그부', '이부', '저부', '해당부', '담당부', '소속부']
+    if (fullDept.length >= 3 && fullDept.length <= 10 && !seenTerms.has(fullDept) && !excludeWords.includes(fullDept)) {
+      seenTerms.add(fullDept)
+
+      // 카테고리 추정
+      let category = '부서'
+      let subcategory = ''
+      if (fullDept.includes('교구') || fullDept.includes('권역') || fullDept.includes('구역')) {
+        category = '조직'
+        subcategory = '교구/구역'
+      }
+
+      dictionary.push({
+        term: fullDept,
+        category,
+        subcategory: subcategory || undefined,
+        definition: fullDept,
+        sourceUrl: baseUrl
+      })
+    }
+  }
+
+  // 3. 예배/행사 패턴 추출
+  const worshipPatterns = [
+    '주일예배', '주일1부예배', '주일2부예배', '주일3부예배',
+    '수요예배', '금요예배', '새벽기도', '새벽예배', '토요예배',
+    '청년예배', '장년예배', '어린이예배', '유아예배',
+    '수련회', '부흥회', '바자회', '바자', '세미나', '성경학교'
+  ]
+
+  for (const worship of worshipPatterns) {
+    if (bodyText.includes(worship) && !seenTerms.has(worship)) {
+      seenTerms.add(worship)
+      dictionary.push({
+        term: worship,
+        category: '행사',
+        definition: worship,
+        sourceUrl: baseUrl
+      })
+    }
+  }
+
+  // 4. 장소 패턴 추출
+  const placePatterns = [
+    '대예배실', '소예배실', '본당', '교육관', '친교실', '식당',
+    '유아실', '유치부실', '초등부실', '청년부실', '도서관',
+    '기도실', '상담실', '사무실', '회의실'
+  ]
+
+  for (const place of placePatterns) {
+    if (bodyText.includes(place) && !seenTerms.has(place)) {
+      seenTerms.add(place)
+      dictionary.push({
+        term: place,
+        category: '장소',
+        definition: place,
+        sourceUrl: baseUrl
+      })
+    }
+  }
+
+  console.log(`[Crawler] HTML 패턴 기반 사전 추출: ${dictionary.length}개`)
+  return dictionary
+}
+
 // ============ 크롤링 메인 함수 ============
 
 /**
@@ -1552,7 +2339,7 @@ export async function crawlChurchWebsite(
     .from('churches')
     .select('*')
     .eq('code', churchCode)
-    .single()
+    .single() as { data: { id: number; name: string; code: string; homepage_url: string } | null; error: any }
 
   if (churchError || !church) {
     return {
@@ -1566,7 +2353,7 @@ export async function crawlChurchWebsite(
   console.log(`[Crawler] ${church.name} 크롤링 시작: ${church.homepage_url}`)
 
   // 2. 메인 페이지 크롤링
-  const mainHtml = await fetchHTML(church.homepage_url)
+  let mainHtml = await fetchHTML(church.homepage_url)
   if (!mainHtml) {
     return {
       success: false,
@@ -1576,15 +2363,54 @@ export async function crawlChurchWebsite(
     }
   }
 
+  let effectiveBaseUrl = church.homepage_url
+
+  // 2-1. 인트로 페이지 감지 및 실제 메인 페이지로 이동
+  const introRedirectUrl = detectIntroPageAndGetMainUrl(mainHtml, church.homepage_url)
+  if (introRedirectUrl) {
+    console.log(`[Crawler] 실제 메인 페이지로 이동: ${introRedirectUrl}`)
+    const actualMainHtml = await fetchHTML(introRedirectUrl)
+    if (actualMainHtml) {
+      mainHtml = actualMainHtml
+      effectiveBaseUrl = introRedirectUrl
+    }
+  }
+
+  // 2-2. iframe 기반 사이트 처리
+  const iframeContentUrl = detectIframeAndGetContentUrl(mainHtml, effectiveBaseUrl)
+  if (iframeContentUrl) {
+    console.log(`[Crawler] iframe 콘텐츠로 이동: ${iframeContentUrl}`)
+    const iframeHtml = await fetchHTML(iframeContentUrl)
+    if (iframeHtml) {
+      // iframe 내용과 원본 모두 분석에 사용
+      mainHtml = iframeHtml + mainHtml
+      effectiveBaseUrl = iframeContentUrl
+    }
+  }
+
+  // 2-3. XML 메뉴 파일 감지 및 파싱
+  let xmlNavigation: PageInfo[] = []
+  const xmlMenuUrl = await detectXMLMenuUrl(mainHtml, effectiveBaseUrl)
+  if (xmlMenuUrl) {
+    console.log(`[Crawler] XML 메뉴 파일 감지: ${xmlMenuUrl}`)
+    xmlNavigation = await parseXMLMenu(xmlMenuUrl, effectiveBaseUrl)
+  }
+
   // 3. HTML 파싱으로 기본 구조 추출
-  const navigation = extractNavigation(mainHtml, church.homepage_url)
-  const boards = detectBoards(mainHtml, church.homepage_url)
+  let navigation = extractNavigation(mainHtml, effectiveBaseUrl)
+
+  // XML 메뉴가 있고 HTML 추출 결과가 없으면 XML 결과 사용
+  if (navigation.length === 0 && xmlNavigation.length > 0) {
+    navigation = xmlNavigation
+    console.log(`[Crawler] XML 메뉴 사용: ${navigation.length}개`)
+  }
+  const boards = detectBoards(mainHtml, effectiveBaseUrl)
   const metadata = extractPageMetadata(mainHtml)
 
   // 확장된 정보 추출
   const contacts = options?.extractContacts !== false ? extractContactInfo(mainHtml) : undefined
-  const socialMedia = options?.extractMedia !== false ? extractSocialMedia(mainHtml, church.homepage_url) : undefined
-  const media = options?.extractMedia !== false ? extractMediaInfo(mainHtml, church.homepage_url) : undefined
+  const socialMedia = options?.extractMedia !== false ? extractSocialMedia(mainHtml, effectiveBaseUrl) : undefined
+  const media = options?.extractMedia !== false ? extractMediaInfo(mainHtml, effectiveBaseUrl) : undefined
   const worshipTimes = extractWorshipTimes(mainHtml)
 
   console.log(`[Crawler] 메뉴 ${navigation.length}개, 게시판 ${boards.length}개 발견`)
@@ -1593,15 +2419,24 @@ export async function crawlChurchWebsite(
   console.log(`[Crawler] 예배시간: ${worshipTimes.length}개`)
 
   // 4. 메인 페이지에서 팝업/모달 감지
-  const mainPopups = detectPopups(mainHtml, church.homepage_url)
+  const mainPopups = detectPopups(mainHtml, effectiveBaseUrl)
   console.log(`[Crawler] 메인 페이지 팝업 ${mainPopups.length}개 발견`)
 
   // 5. AI 분석으로 상세 구조 추출
-  const aiAnalysis = await analyzeStructureWithAI(mainHtml, church.homepage_url)
+  const aiAnalysis = await analyzeStructureWithAI(mainHtml, effectiveBaseUrl)
 
-  // 6. 인물 정보 추출 (선택적)
+  // 6. 사전 정보 추출
   // AI 응답이 배열이 아닐 수 있으므로 확인
   let dictionary: DictionaryEntry[] = Array.isArray(aiAnalysis.dictionary) ? aiAnalysis.dictionary : []
+
+  // AI 분석 결과가 없거나 비어있으면 HTML 패턴 기반 추출 시도
+  if (dictionary.length === 0) {
+    console.log('[Crawler] AI 사전 추출 실패, HTML 패턴 기반 추출 시도...')
+    dictionary = extractDictionaryFromHTML(mainHtml, effectiveBaseUrl)
+  } else {
+    console.log(`[Crawler] AI 사전 추출 성공: ${dictionary.length}개`)
+  }
+
   let allPopups: PopupInfo[] = [...mainPopups]
   let finalNavigation = navigation.length > 0 ? navigation : (aiAnalysis.structure?.navigation || [])
   let crawlProgress: CrawlProgress | undefined
@@ -1695,7 +2530,7 @@ export async function crawlChurchWebsite(
     })),
     metadata: {
       totalPages: crawlProgress?.totalPages ||
-        finalNavigation.reduce((acc, m) => acc + 1 + (m.children?.length || 0), 0),
+        finalNavigation.reduce((acc: number, m: PageInfo) => acc + 1 + (m.children?.length || 0), 0),
       maxDepth,
       hasLogin: mainHtml.includes('login') || mainHtml.includes('로그인'),
       hasMobileVersion: mainHtml.includes('mobile') || metadata.viewport.includes('width=device-width'),
@@ -1713,7 +2548,7 @@ export async function crawlChurchWebsite(
   await saveCrawlResult(church.id, structure, dictionary, taxonomy)
 
   // 10. 크롤링 로그 저장
-  await getSupabase().from('church_crawl_logs').insert({
+  await (getSupabase().from('church_crawl_logs') as any).insert({
     church_id: church.id,
     crawl_type: options?.deepCrawl ? 'deep' : 'full',
     status: 'completed',
@@ -1808,7 +2643,8 @@ async function saveCrawlResult(
   dictionary: DictionaryEntry[],
   taxonomy: TaxonomyNode[]
 ): Promise<void> {
-  const db = getSupabase()
+  // Supabase 타입 추론 문제로 any 타입 사용
+  const db = getSupabase() as any
 
   // 기존 구조 삭제
   await db.from('church_site_structure').delete().eq('church_id', churchId)
@@ -2053,7 +2889,8 @@ async function saveCrawlResult(
  * 교회 구조 조회
  */
 export async function getChurchStructure(churchCode: string): Promise<SiteStructure | null> {
-  const { data: church } = await getSupabase()
+  const db = getSupabase() as any
+  const { data: church } = await db
     .from('churches')
     .select('id, name, code, homepage_url')
     .eq('code', churchCode)
@@ -2062,7 +2899,7 @@ export async function getChurchStructure(churchCode: string): Promise<SiteStruct
   if (!church) return null
 
   // 구조 조회
-  const { data: structure } = await getSupabase()
+  const { data: structure } = await db
     .from('church_site_structure')
     .select('*')
     .eq('church_id', church.id)
@@ -2072,8 +2909,8 @@ export async function getChurchStructure(churchCode: string): Promise<SiteStruct
   if (!structure) return null
 
   // 계층 구조로 변환
-  const navigation = buildTree(structure.filter(s => s.page_type !== 'board'))
-  const boards = structure.filter(s => s.page_type === 'board').map(b => ({
+  const navigation = buildTree(structure.filter((s: any) => s.page_type !== 'board'))
+  const boards = structure.filter((s: any) => s.page_type === 'board').map((b: any) => ({
     url: b.url || '',
     title: b.title,
     pageType: 'board' as const,
@@ -2088,7 +2925,7 @@ export async function getChurchStructure(churchCode: string): Promise<SiteStruct
     specialPages: [],
     metadata: {
       totalPages: structure.length,
-      maxDepth: Math.max(...structure.map(s => s.depth)),
+      maxDepth: Math.max(...structure.map((s: any) => s.depth)),
       hasLogin: false,
       hasMobileVersion: true,
       technologies: []
@@ -2103,7 +2940,8 @@ export async function getChurchDictionary(
   churchCode: string,
   category?: string
 ): Promise<DictionaryEntry[]> {
-  const { data: church } = await getSupabase()
+  const db = getSupabase() as any
+  const { data: church } = await db
     .from('churches')
     .select('id')
     .eq('code', churchCode)
@@ -2111,7 +2949,7 @@ export async function getChurchDictionary(
 
   if (!church) return []
 
-  let query = getSupabase()
+  let query = db
     .from('church_dictionary')
     .select('*')
     .eq('church_id', church.id)
@@ -2122,7 +2960,7 @@ export async function getChurchDictionary(
 
   const { data } = await query.order('category').order('term')
 
-  return (data || []).map(d => ({
+  return (data || []).map((d: any) => ({
     term: d.term,
     category: d.category,
     subcategory: d.subcategory,
@@ -2144,7 +2982,8 @@ export async function getChurches(): Promise<Array<{
   homepageUrl: string
   lastCrawled?: string
 }>> {
-  const { data: churches } = await getSupabase()
+  const db = getSupabase() as any
+  const { data: churches } = await db
     .from('churches')
     .select('id, name, code, homepage_url')
     .eq('is_active', true)
@@ -2155,7 +2994,7 @@ export async function getChurches(): Promise<Array<{
   // 마지막 크롤링 시간 조회
   const result = []
   for (const church of churches) {
-    const { data: log } = await getSupabase()
+    const { data: log } = await db
       .from('church_crawl_logs')
       .select('completed_at')
       .eq('church_id', church.id)

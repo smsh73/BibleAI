@@ -128,8 +128,10 @@ async function loadValidationCache(): Promise<void> {
   }
 
   try {
+    const db = getSupabase() as any
+
     // 교회 구성원 로드
-    const { data: members } = await getSupabase()
+    const { data: members } = await db
       .from('church_members')
       .select('name, position, department, role')
       .eq('is_active', true)
@@ -139,7 +141,7 @@ async function loadValidationCache(): Promise<void> {
     }
 
     // OCR 교정 패턴 로드
-    const { data: corrections } = await getSupabase()
+    const { data: corrections } = await db
       .from('ocr_corrections')
       .select('wrong_text, correct_text, category, confidence')
 
@@ -148,12 +150,12 @@ async function loadValidationCache(): Promise<void> {
     }
 
     // 장소 목록 로드
-    const { data: places } = await getSupabase()
+    const { data: places } = await db
       .from('church_places')
       .select('name, aliases')
 
     if (places) {
-      churchPlacesCache = places.map(p => ({
+      churchPlacesCache = places.map((p: any) => ({
         name: p.name,
         aliases: p.aliases || []
       }))

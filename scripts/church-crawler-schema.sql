@@ -220,14 +220,37 @@ CREATE INDEX IF NOT EXISTS idx_church_worship_times_church_id ON church_worship_
 
 -- 기본 교회 데이터 삽입
 INSERT INTO churches (name, code, homepage_url, denomination) VALUES
+  -- 기존 교회
   ('안양제일교회', 'anyangjeil', 'https://www.anyangjeil.org/', '대한예수교장로회(통합)'),
   ('사랑의교회', 'sarang', 'https://www.sarang.org/', '대한예수교장로회(합동)'),
-  ('온누리교회', 'onnuri', 'https://www.onnuri.org/', '대한예수교장로회(합동)'),
+  ('온누리교회', 'onnuri', 'https://www.onnuri.org/', '대한예수교장로회(통합)'),
   ('여의도순복음교회', 'fgtv', 'https://www.fgtv.com/', '기독교대한하나님의성회'),
   ('명성교회', 'msch', 'http://www.msch.or.kr/', '대한예수교장로회(통합)'),
-  ('광림교회', 'klmc', 'https://www.klmc.church/', '기독교대한감리회')
+  ('광림교회', 'klmc', 'https://www.klmc.church/', '기독교대한감리회'),
+  -- 추가 교회 (2024.02)
+  ('금란교회', 'kumnan', 'https://www.kumnan.org/', '기독교대한감리회'),
+  ('꽃동산교회', 'flowergarden', 'http://www.flowergarden.or.kr/', '대한예수교장로회(합동)'),
+  ('남가주사랑의교회', 'sarangla', 'https://www.sarang.com/', 'PCA'),
+  ('삼일교회', 'samil', 'https://www.samilchurch.com/', '대한예수교장로회(합동)'),
+  ('새로남교회', 'saeronam', 'https://www.saeronam.or.kr/', '대한예수교장로회(합동)'),
+  ('새문안교회', 'saemoonan', 'https://www.saemoonan.org/', '대한예수교장로회(통합)'),
+  ('새에덴교회', 'saeeden', 'https://www.saeeden.kr/', '대한예수교장로회(합동)'),
+  ('소망교회', 'somang', 'https://somang.net/', '대한예수교장로회(통합)'),
+  ('수영로교회', 'sooyoungro', 'https://www.sooyoungro.org/', '대한예수교장로회(합동)'),
+  ('숭의교회', 'sungui', 'http://www.sech.or.kr/', '기독교대한감리회'),
+  ('신길교회', 'shingil', 'http://www.shingil.kr/', '기독교대한하나님의성회'),
+  ('연세중앙교회', 'yonsei', 'https://www.yonsei.or.kr/', '기독교한국침례회'),
+  ('영락교회', 'youngnak', 'https://www.youngnak.net/', '대한예수교장로회(통합)'),
+  ('오륜교회', 'oryun', 'https://oryun.org/', '대한예수교장로회(합동)'),
+  ('은혜와진리교회', 'gntc', 'https://gntc.net/', '기독교대한하나님의성회'),
+  ('인천순복음교회', 'incheonfgtv', 'http://www.hyo7.com/', '기독교대한하나님의성회'),
+  ('일산벧엘교회', 'bethel', 'http://bethel.or.kr/', '대한예수교장로회(합동)'),
+  ('주안장로교회', 'juan', 'https://w3.juan.or.kr/', '대한예수교장로회(통합)'),
+  ('지구촌교회', 'jiguchon', 'https://www.jiguchon.or.kr/', '기독교한국침례회'),
+  ('충현교회', 'chunghyun', 'https://www.choonghyunchurch.or.kr/', '대한예수교장로회(합동)')
 ON CONFLICT (code) DO UPDATE SET
   homepage_url = EXCLUDED.homepage_url,
+  denomination = EXCLUDED.denomination,
   updated_at = NOW();
 
 -- 구조 검색 함수
