@@ -54,7 +54,7 @@ const PROVIDER_LABELS: Record<AIProvider, string> = {
   youtube: 'YouTube API'
 }
 
-type TabType = 'api-keys' | 'bible' | 'data'
+type TabType = 'api-keys' | 'voice' | 'bible' | 'data'
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<TabType>('api-keys')
@@ -80,6 +80,15 @@ export default function AdminPage() {
   const [dataStats, setDataStats] = useState<DataStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
 
+  // Voice 설정
+  const [voiceSettings, setVoiceSettings] = useState({
+    voice_id: '',
+    provider: 'elevenlabs' as 'elevenlabs' | 'openai' | 'google',
+    source: 'env' as 'env' | 'database'
+  })
+  const [voiceLoading, setVoiceLoading] = useState(false)
+  const [voiceSaving, setVoiceSaving] = useState(false)
+
   // API 키 목록 로드
   useEffect(() => {
     fetchApiKeys()
@@ -91,6 +100,8 @@ export default function AdminPage() {
       fetchBibleVersions()
     } else if (activeTab === 'data') {
       fetchDataStats()
+    } else if (activeTab === 'voice') {
+      fetchVoiceSettings()
     }
   }, [activeTab])
 
@@ -134,6 +145,50 @@ export default function AdminPage() {
       console.error('Failed to fetch stats:', error)
     } finally {
       setStatsLoading(false)
+    }
+  }
+
+  async function fetchVoiceSettings() {
+    setVoiceLoading(true)
+    try {
+      const res = await fetch('/api/admin/voice-settings')
+      const data = await res.json()
+      if (data.success) {
+        setVoiceSettings(data.settings)
+      }
+    } catch (error) {
+      console.error('Failed to fetch voice settings:', error)
+    } finally {
+      setVoiceLoading(false)
+    }
+  }
+
+  async function handleVoiceSave(e: React.FormEvent) {
+    e.preventDefault()
+    setVoiceSaving(true)
+
+    try {
+      const res = await fetch('/api/admin/voice-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          voice_id: voiceSettings.voice_id,
+          provider: voiceSettings.provider
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        alert('Voice ID가 저장되었습니다.')
+        setVoiceSettings({ ...data.settings, source: 'database' })
+      } else {
+        alert(`저장 실패: ${data.error}`)
+      }
+    } catch (error: any) {
+      console.error('Save error:', error)
+      alert(`저장 중 오류 발생: ${error.message}`)
+    } finally {
+      setVoiceSaving(false)
     }
   }
 
@@ -309,6 +364,7 @@ export default function AdminPage() {
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             {[
               { id: 'api-keys', label: 'API 키 관리' },
+              { id: 'voice', label: 'Voice 설정' },
               { id: 'bible', label: '성경 버전' },
               { id: 'data', label: '데이터 관리' }
             ].map(tab => (
@@ -494,6 +550,109 @@ export default function AdminPage() {
                 <br />
                 하나의 API가 실패하면 자동으로 다음 API로 넘어갑니다.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Voice 설정 탭 */}
+        {activeTab === 'voice' && (
+          <div className="space-y-6 animate-fade-in">
+            {/* 현재 Voice 설정 */}
+            <div className="bg-white/95 rounded-xl shadow-sm border border-amber-100 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">ElevenLabs Voice 설정</h2>
+
+              {voiceLoading ? (
+                <div className="text-center py-8 text-gray-500">로딩 중...</div>
+              ) : (
+                <>
+                  <div className="mb-6 p-4 bg-amber-50 rounded-lg border border-amber-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-amber-900">현재 설정</h3>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        voiceSettings.source === 'database'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {voiceSettings.source === 'database' ? '관리자 설정' : '환경 변수'}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <p className="text-gray-700">
+                        <span className="font-medium">Voice ID:</span>{' '}
+                        <span className="font-mono text-amber-700">
+                          {voiceSettings.voice_id || '(설정되지 않음)'}
+                        </span>
+                      </p>
+                      <p className="text-gray-700">
+                        <span className="font-medium">Provider:</span>{' '}
+                        <span className="text-amber-700">{voiceSettings.provider}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleVoiceSave} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700">
+                        Voice ID
+                      </label>
+                      <input
+                        type="text"
+                        value={voiceSettings.voice_id}
+                        onChange={(e) => setVoiceSettings({ ...voiceSettings, voice_id: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg font-mono text-gray-900 bg-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                        placeholder="9VYyUj7Y2oHpf8c7oJtZ"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        ElevenLabs에서 생성한 Voice ID를 입력하세요.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700">
+                        Provider
+                      </label>
+                      <select
+                        value={voiceSettings.provider}
+                        onChange={(e) => setVoiceSettings({ ...voiceSettings, provider: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-200"
+                      >
+                        <option value="elevenlabs">ElevenLabs</option>
+                        <option value="openai">OpenAI TTS</option>
+                        <option value="google">Google Cloud TTS</option>
+                      </select>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={voiceSaving}
+                        className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium transition-colors disabled:opacity-50"
+                      >
+                        {voiceSaving ? '저장 중...' : '저장하기'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={fetchVoiceSettings}
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+                      >
+                        새로고침
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
+
+            {/* 안내 메시지 */}
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <h3 className="font-semibold text-amber-900 mb-2">Voice 설정 우선순위</h3>
+              <ul className="text-sm text-gray-600 space-y-1">
+                <li>• <strong>관리자 설정</strong>: 이 페이지에서 설정한 Voice ID가 최우선으로 사용됩니다.</li>
+                <li>• <strong>환경 변수</strong>: 관리자 설정이 없을 경우 .env.local의 ELEVENLABS_VOICE_ID가 사용됩니다.</li>
+                <li>• 팟캐스트 오디오 생성 시 자동으로 적용됩니다.</li>
+                <li>• Voice ID는 ElevenLabs 대시보드에서 확인할 수 있습니다.</li>
+              </ul>
             </div>
           </div>
         )}

@@ -5,6 +5,12 @@
  */
 
 import OpenAI from 'openai'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+)
 
 interface AudioGenerationResult {
   success: boolean
@@ -18,6 +24,31 @@ interface GenerateAudioParams {
   question: string
   answer: string
   verseReferences: string[]
+}
+
+/**
+ * 데이터베이스에서 Voice ID 가져오기
+ * - 관리자 페이지에서 설정한 Voice ID 우선 사용
+ * - 없으면 환경 변수 사용
+ */
+async function getVoiceId(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from('admin_settings')
+      .select('value')
+      .eq('key', 'voice_settings')
+      .single()
+
+    if (!error && data) {
+      const settings = JSON.parse(data.value as string)
+      return settings.voice_id || null
+    }
+  } catch (error) {
+    console.warn('[audio-generator] Failed to fetch voice settings from DB, using env:', error)
+  }
+
+  // Fallback to env variable
+  return process.env.ELEVENLABS_VOICE_ID || null
 }
 
 /**
@@ -96,11 +127,13 @@ ${processedVerses ? `오늘 나눈 말씀은 ${processedVerses} 이었습니다.
  */
 async function generateWithElevenLabs(params: GenerateAudioParams): Promise<AudioGenerationResult> {
   const apiKey = process.env.ELEVENLABS_API_KEY
-  const voiceId = process.env.ELEVENLABS_VOICE_ID
+  const voiceId = await getVoiceId()
 
   if (!apiKey || !voiceId) {
     return { success: false, error: 'ElevenLabs API key or Voice ID not configured' }
   }
+
+  console.log('[audio-generator] Using Voice ID:', voiceId)
 
   try {
     const script = buildPodcastScript(params)
