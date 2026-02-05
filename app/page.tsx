@@ -335,6 +335,7 @@ export default function Home() {
   const [verseReferences, setVerseReferences] = useState<VerseReference[]>([])
   const [sermonReferences, setSermonReferences] = useState<SermonReference[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const latestVersesRef = useRef<VerseReference[]>([])  // 최신 구절 추적 (미디어 생성용)
 
   // 미디어 생성 상태 (위로 이미지 + 팟캐스트 오디오)
   const [comfortImage, setComfortImage] = useState<string | null>(null)
@@ -464,6 +465,12 @@ export default function Home() {
 
               if (data.type === 'verses') {
                 setVerseReferences(data.verses)
+                latestVersesRef.current = data.verses
+              } else if (data.type === 'verses_update') {
+                // AI 응답 완료 후 인용된 구절로 업데이트
+                setVerseReferences(data.verses)
+                latestVersesRef.current = data.verses
+                console.log('[page] verses_update 수신:', data.verses.length, '개')
               } else if (data.type === 'sermons') {
                 setSermonReferences(data.sermons)
               } else if (data.content) {
@@ -497,8 +504,9 @@ export default function Home() {
         }
       }
       // 응답 완료 후 미디어 자동 생성 (간단한 메시지가 아닌 경우만)
+      // latestVersesRef를 사용하여 verses_update로 갱신된 최신 구절 반영
       if (assistantMessage && !isSimple) {
-        generateMedia(userMessage.content, assistantMessage, verseReferences)
+        generateMedia(userMessage.content, assistantMessage, latestVersesRef.current)
       }
     } catch (error) {
       console.error('Chat error:', error)

@@ -27,9 +27,9 @@ async function main() {
       delayMs: 500,
       onProgress: (progress) => {
         if (progress.currentUrl) {
-          console.log(`📄 [${progress.crawledPages}/${progress.totalPages || '?'}] ${progress.status}: ${progress.currentUrl?.substring(0, 60)}`)
+          console.log(`📄 [${progress.crawledPages}/${progress.totalPages || '?'}] ${(progress as any).status}: ${progress.currentUrl?.substring(0, 60)}`)
         } else {
-          console.log(`📊 ${progress.status}`)
+          console.log(`📊 ${(progress as any).status}`)
         }
       }
     })
@@ -48,9 +48,9 @@ async function main() {
       console.log(`   - 분류 체계: ${result.taxonomy?.length || 0}개`)
 
       // 네비게이션 출력
-      if (result.structure?.navigation?.length > 0) {
+      if ((result.structure?.navigation?.length || 0) > 0) {
         console.log('\n📌 네비게이션 메뉴:')
-        result.structure.navigation.slice(0, 10).forEach((nav: any, i: number) => {
+        result.structure!.navigation!.slice(0, 10).forEach((nav: any, i: number) => {
           console.log(`   ${i + 1}. ${nav.title} ${nav.url ? `→ ${nav.url.substring(0, 50)}` : ''}`)
           if (nav.children?.length > 0) {
             nav.children.slice(0, 5).forEach((child: any, j: number) => {
@@ -61,16 +61,16 @@ async function main() {
             }
           }
         })
-        if (result.structure.navigation.length > 10) {
-          console.log(`   ... 외 ${result.structure.navigation.length - 10}개`)
+        if (result.structure!.navigation!.length > 10) {
+          console.log(`   ... 외 ${result.structure!.navigation!.length - 10}개`)
         }
       }
 
       // 사전 항목 출력
-      if (result.dictionary?.length > 0) {
+      if ((result.dictionary?.length || 0) > 0) {
         console.log('\n📚 사전 항목:')
         const byCategory: Record<string, any[]> = {}
-        result.dictionary.forEach((d: any) => {
+        result.dictionary!.forEach((d: any) => {
           if (!byCategory[d.category]) byCategory[d.category] = []
           byCategory[d.category].push(d)
         })
@@ -87,13 +87,13 @@ async function main() {
       }
 
       // 에러
-      if (result.errors?.length > 0) {
+      if ((result.errors?.length || 0) > 0) {
         console.log('\n⚠️ 에러:')
-        result.errors.slice(0, 5).forEach((err: string) => {
+        result.errors!.slice(0, 5).forEach((err: string) => {
           console.log(`   - ${err.substring(0, 80)}`)
         })
-        if (result.errors.length > 5) {
-          console.log(`   ... 외 ${result.errors.length - 5}개`)
+        if (result.errors!.length > 5) {
+          console.log(`   ... 외 ${result.errors!.length - 5}개`)
         }
       }
     } else {

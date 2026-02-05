@@ -69,8 +69,8 @@ async function main() {
         deepCrawl: true,
         delayMs: 800,  // 서버 부하 방지
         onProgress: (p) => {
-          if (p.status && !p.currentUrl) {
-            console.log(`   ${p.status}`)
+          if ((p as any).status && !p.currentUrl) {
+            console.log(`   ${(p as any).status}`)
           }
         }
       })

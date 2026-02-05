@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { searchBibleVerses, hybridSearchSermons, hybridSearchNews, hybridSearchBulletin, getVersesRelationsForChat } from '@/lib/supabase'
+import { searchBibleVerses, hybridSearchSermons, hybridSearchNews, hybridSearchBulletin, getVersesRelationsForChat, lookupVersesByReferences } from '@/lib/supabase'
 import { generateStreamingResponse, searchChristianWisdom } from '@/lib/ai-providers'
 import type { ChatMessage, EmotionType } from '@/types'
 
@@ -221,11 +221,40 @@ export async function POST(req: NextRequest) {
             console.log('[Chat API] 설교 정보 전송:', sermonsInfo.sermons.length, '개')
           }
 
+          // 전체 AI 응답 텍스트 수집
+          let fullResponseText = ''
+
           for await (const chunk of generateStreamingResponse(messages, context)) {
             const data = JSON.stringify(chunk)
             controller.enqueue(encoder.encode(`data: ${data}\n\n`))
 
+            // 응답 텍스트 축적
+            if (chunk.content) {
+              fullResponseText += chunk.content
+            }
+
             if (chunk.done) {
+              // AI 응답 완료 후: 인용된 구절 추출 및 verses_update 전송
+              try {
+                const quotedRefs = extractQuotedVerses(fullResponseText)
+                if (quotedRefs.length > 0) {
+                  console.log('[Chat API] AI 인용 구절 추출:', quotedRefs)
+                  const lookedUpVerses = await lookupVersesByReferences(quotedRefs)
+                  if (lookedUpVerses.length > 0) {
+                    const versesUpdate = {
+                      type: 'verses_update',
+                      verses: lookedUpVerses
+                    }
+                    controller.enqueue(
+                      encoder.encode(`data: ${JSON.stringify(versesUpdate)}\n\n`)
+                    )
+                    console.log('[Chat API] verses_update 전송:', lookedUpVerses.length, '개')
+                  }
+                }
+              } catch (e) {
+                console.warn('[Chat API] verses_update 처리 실패:', e)
+              }
+
               controller.close()
               break
             }
@@ -266,6 +295,30 @@ function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = Math.floor(seconds % 60)
   return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+/**
+ * AI 응답 텍스트에서 인용된 성경 구절 참조를 추출
+ * "잠언 3:5-6", "시편 23:1", "마태복음 6:25-34" 등의 패턴 매칭
+ */
+function extractQuotedVerses(text: string): string[] {
+  const patterns = [
+    // 한국어 성경 참조: "잠언 3:5-6", "시편 23:1", "마태복음 6:25"
+    /(?:창세기|출애굽기|레위기|민수기|신명기|여호수아|사사기|룻기|사무엘상|사무엘하|열왕기상|열왕기하|역대상|역대하|에스라|느헤미야|에스더|욥기|시편|잠언|전도서|아가|이사야|예레미야|예레미야애가|에스겔|다니엘|호세아|요엘|아모스|오바댜|요나|미가|나훔|하박국|스바냐|학개|스가랴|말라기|마태복음|마가복음|누가복음|요한복음|사도행전|로마서|고린도전서|고린도후서|갈라디아서|에베소서|빌립보서|골로새서|데살로니가전서|데살로니가후서|디모데전서|디모데후서|디도서|빌레몬서|히브리서|야고보서|베드로전서|베드로후서|요한일서|요한이서|요한삼서|유다서|요한계시록)\s*\d+:\d+(?:\s*[-–~]\s*\d+)?/g,
+    // 약어 형태: "잠 3:5", "시 23:1", "마 6:25"
+    /(?:창|출|레|민|신|수|삿|룻|삼상|삼하|왕상|왕하|대상|대하|스|느|에|욥|시|잠|전|아|사|렘|애|겔|단|호|욜|암|옵|욘|미|나|합|습|학|슥|말|마|막|눅|요|행|롬|고전|고후|갈|엡|빌|골|살전|살후|딤전|딤후|딛|몬|히|약|벧전|벧후|요일|요이|요삼|유|계)\s*\d+:\d+(?:\s*[-–~]\s*\d+)?/g
+  ]
+
+  const references = new Set<string>()
+
+  for (const pattern of patterns) {
+    const matches = text.matchAll(pattern)
+    for (const match of matches) {
+      references.add(match[0].trim())
+    }
+  }
+
+  return Array.from(references)
 }
 
 /**

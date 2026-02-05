@@ -76,6 +76,8 @@ export interface HybridSearchOptions {
   keywordWeight?: number
   testament?: '구약' | '신약'
   version?: string  // 성경 버전 필터 (GAE, KRV, NIV 등)
+  keywordText?: string  // 키워드 검색용 별도 텍스트 (쿼리 리라이터 결과)
+  minSimilarity?: number  // 최소 벡터 유사도 임계값
 }
 
 export interface BibleVersion {
@@ -166,6 +168,82 @@ export async function generateEmbeddingsBatch(texts: string[]): Promise<number[]
 }
 
 // ============================================
+// 쿼리 리라이터 (GPT-4o-mini)
+// ============================================
+
+/**
+ * GPT-4o-mini를 사용하여 사용자 쿼리를 성경 검색에 최적화된 쿼리로 변환
+ * "아들의 성적이 걱정" → "자녀 양육 염려 하나님께 맡김 신뢰 평안 지혜"
+ */
+export async function rewriteQueryForBibleSearch(userQuery: string): Promise<{
+  rewrittenQuery: string
+  bibleKeywords: string[]
+}> {
+  if (!OPENAI_API_KEY) {
+    return { rewrittenQuery: userQuery, bibleKeywords: [] }
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a Bible search query optimizer. Transform user queries into Bible-search-optimized queries.
+
+Rules:
+1. Remove literal/personal keywords (names, grades, scores, job titles, specific places)
+2. Extract the spiritual/emotional INTENT behind the query
+3. Use Bible-relevant theological terms in Korean
+4. Output JSON with "query" (rewritten search query string) and "keywords" (array of 3-5 Bible-relevant Korean keywords for tsvector search)
+
+Examples:
+- "아들의 성적이 걱정" → {"query": "자녀 양육 염려 하나님께 맡김 신뢰 평안 지혜", "keywords": ["자녀", "염려", "신뢰", "지혜", "평안"]}
+- "직장에서 스트레스 받아" → {"query": "수고 무거운 짐 안식 쉼 평안 위로", "keywords": ["수고", "안식", "위로", "평안", "쉼"]}
+- "외로움을 느낍니다" → {"query": "외로움 함께하심 버리지 않음 위로 동행", "keywords": ["외로움", "함께", "위로", "동행", "사랑"]}
+- "미래가 불안해요" → {"query": "미래 두려움 계획 소망 인도하심 신뢰", "keywords": ["두려움", "소망", "인도", "신뢰", "계획"]}
+- "남편이랑 싸웠어" → {"query": "부부 갈등 화해 사랑 인내 용서 평화", "keywords": ["사랑", "인내", "용서", "화해", "평화"]}
+- "감사합니다 하나님" → {"query": "감사 찬양 은혜 축복 기쁨 감사함", "keywords": ["감사", "찬양", "은혜", "축복", "기쁨"]}`
+          },
+          {
+            role: 'user',
+            content: userQuery
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 200,
+        response_format: { type: 'json_object' }
+      })
+    })
+
+    if (!response.ok) {
+      console.warn('[rewriteQuery] OpenAI API error, using original query')
+      return { rewrittenQuery: userQuery, bibleKeywords: [] }
+    }
+
+    const data = await response.json()
+    const result = JSON.parse(data.choices[0].message.content)
+
+    console.log(`[rewriteQuery] "${userQuery}" → "${result.query}"`)
+    console.log(`[rewriteQuery] keywords:`, result.keywords)
+
+    return {
+      rewrittenQuery: result.query || userQuery,
+      bibleKeywords: result.keywords || []
+    }
+  } catch (error) {
+    console.warn('[rewriteQuery] Failed, using original query:', error)
+    return { rewrittenQuery: userQuery, bibleKeywords: [] }
+  }
+}
+
+// ============================================
 // Hybrid RAG 검색
 // ============================================
 
@@ -180,10 +258,12 @@ export async function hybridSearchBible(
 ): Promise<SearchResult[]> {
   const {
     limit = 10,
-    vectorWeight = 0.7,
-    keywordWeight = 0.3,
+    vectorWeight = 0.85,
+    keywordWeight = 0.15,
     testament,
-    version  // 버전 필터 추가
+    version,
+    keywordText,
+    minSimilarity = 0.3
   } = options
 
   const client = getSupabaseAdmin() || getSupabase()
@@ -197,13 +277,14 @@ export async function hybridSearchBible(
     const queryEmbedding = await generateEmbedding(query)
 
     // 2. Hybrid 검색 RPC 호출 (버전 필터 포함)
+    // keywordText가 있으면 그것을 키워드 검색에 사용 (리라이터 결과)
     const { data, error } = await client.rpc('hybrid_search_bible', {
       query_embedding: queryEmbedding,
-      query_text: query,
+      query_text: keywordText || query,
       match_count: limit,
       vector_weight: vectorWeight,
       keyword_weight: keywordWeight,
-      filter_version: version || null  // 버전 필터 전달
+      filter_version: version || null
     })
 
     if (error) {
@@ -211,11 +292,16 @@ export async function hybridSearchBible(
       throw error
     }
 
-    // 3. 결과 필터링 (testament) - 클라이언트 사이드 추가 필터
-    let results = data || []
+    // 3. 결과 필터링
+    let results = (data || []) as any[]
+
+    // testament 필터
     if (testament) {
       results = results.filter((r: any) => r.testament === testament)
     }
+
+    // 최소 벡터 유사도 필터 (노이즈 제거)
+    results = results.filter((r: any) => (r.similarity || 0) >= minSimilarity)
 
     return results.map((row: any) => ({
       id: row.id,
@@ -225,7 +311,7 @@ export async function hybridSearchBible(
       verse: row.verse,
       content: row.content,
       reference: row.reference,
-      version_id: row.version_id,  // 버전 ID 포함
+      version_id: row.version_id,
       similarity: row.similarity,
       keyword_rank: row.keyword_rank,
       combined_score: row.combined_score
@@ -1093,10 +1179,23 @@ export async function searchBibleVerses(
 ): Promise<LegacySearchResult[]> {
   const { limit = 5, version } = options
 
-  // 1. hybrid 검색 시도 (벡터 + 키워드, 버전 필터링)
-  let results = await hybridSearchBible(query, { limit, version })
+  // 1. 쿼리 리라이트 (GPT-4o-mini로 성경 검색 최적화)
+  const { rewrittenQuery, bibleKeywords } = await rewriteQueryForBibleSearch(query)
 
-  // 2. hybrid 검색 실패 시 키워드 검색으로 폴백
+  // 2. hybrid 검색 (리라이트된 쿼리로 벡터 검색, 키워드는 별도 전달)
+  let results = await hybridSearchBible(rewrittenQuery, {
+    limit: limit * 3,  // 과다 추출 후 상위 N개 선택
+    vectorWeight: 0.85,
+    keywordWeight: 0.15,
+    keywordText: bibleKeywords.length > 0 ? bibleKeywords.join(' ') : undefined,
+    minSimilarity: 0.3,
+    version
+  })
+
+  // 3. 상위 limit개만 선택
+  results = results.slice(0, limit)
+
+  // 4. hybrid 검색 실패 시 키워드 검색으로 폴백 (원본 쿼리 사용)
   if (results.length === 0) {
     console.log('[searchBibleVerses] hybrid 검색 실패, 키워드 검색으로 폴백...')
     results = await keywordSearchBible(query, { limit })
@@ -1127,6 +1226,54 @@ export async function searchBibleVerses(
     similarity: row.combined_score || row.similarity || 0,
     distance: 1 - (row.combined_score || row.similarity || 0)
   }))
+}
+
+// ============================================
+// AI 인용 구절 조회
+// ============================================
+
+/**
+ * 성경 구절 참조 문자열로 DB에서 실제 내용 조회
+ * "잠언 3:5", "시편 23:1" 등의 참조를 파싱하여 검색
+ */
+export async function lookupVersesByReferences(
+  references: string[]
+): Promise<{ reference: string; content: string }[]> {
+  const client = getSupabaseAdmin() || getSupabase()
+  if (!client || references.length === 0) return []
+
+  const results: { reference: string; content: string }[] = []
+
+  for (const ref of references) {
+    try {
+      // "잠언 3:5-6" → book="잠언", chapter=3, verse=5
+      const match = ref.match(/^(.+?)\s*(\d+):(\d+)/)
+      if (!match) continue
+
+      const [, bookName, chapter, verse] = match
+
+      const { data, error } = await client
+        .from('bible_verses')
+        .select('reference, content')
+        .eq('book_name', bookName.trim())
+        .eq('chapter', parseInt(chapter))
+        .eq('verse', parseInt(verse))
+        .limit(1)
+        .single()
+
+      if (!error && data) {
+        results.push({
+          reference: data.reference,
+          content: data.content
+        })
+      }
+    } catch (e) {
+      // 개별 구절 조회 실패는 무시
+      console.warn(`[lookupVerses] Failed for "${ref}":`, e)
+    }
+  }
+
+  return results
 }
 
 // ============================================
