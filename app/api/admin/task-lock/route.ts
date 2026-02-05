@@ -64,7 +64,9 @@ export async function GET() {
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows
         // 테이블이 없으면 메모리 잠금 사용
-        if (error.message?.includes('does not exist')) {
+        if (error.code === 'PGRST205' ||
+            error.message?.includes('does not exist') ||
+            error.message?.includes('Could not find')) {
           return getMemoryLockStatus()
         }
         throw error
