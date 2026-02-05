@@ -615,7 +615,7 @@ export async function testSupabaseConnection(): Promise<{
   connected: boolean
   message: string
 }> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) {
     return { connected: false, message: 'Supabase client not configured' }
   }
@@ -1457,7 +1457,7 @@ export interface VerseGraph {
  * 구절의 직접 연결된 관계 가져오기
  */
 export async function getVerseRelations(reference: string): Promise<VerseRelation[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -1491,7 +1491,7 @@ export async function getConnectedVerses(
   maxDepth: number = 2,
   maxResults: number = 20
 ): Promise<ConnectedVerse[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -1527,7 +1527,7 @@ export async function getVersesByTheme(
   minConfidence: number = 0.7,
   maxResults: number = 10
 ): Promise<VerseTheme[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -1557,7 +1557,7 @@ export async function getVersesByTheme(
  * 구절의 주제 태그 가져오기
  */
 export async function getVerseThemes(reference: string): Promise<string[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -1580,7 +1580,7 @@ export async function getVerseThemes(reference: string): Promise<string[]> {
  * @param version 성경 버전 (예: "GAE", "NIV") - bible_verses 조회 시 사용
  */
 export async function getVerseContent(reference: string, version?: string): Promise<string | null> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return null
 
   try {
@@ -1638,14 +1638,61 @@ export async function buildVerseGraph(
   const edges: GraphEdge[] = []
   const visitedRefs = new Set<string>()
 
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) {
     return { nodes: [], edges: [], centerReference }
   }
 
   // 1. BFS로 연결된 구절 탐색 (가장 먼저 실행)
   const startBFS = Date.now()
-  const connectedVerses = await getConnectedVerses(centerReference, maxDepth, 30)
+  let connectedVerses = await getConnectedVerses(centerReference, maxDepth, 30)
+
+  // RPC가 없거나 결과가 없으면 verse_relations 테이블 직접 조회 (fallback)
+  if (connectedVerses.length === 0) {
+    try {
+      const [srcRels, tgtRels] = await Promise.all([
+        client.from('verse_relations')
+          .select('target_reference, relation_type, description')
+          .eq('source_reference', centerReference)
+          .limit(15),
+        client.from('verse_relations')
+          .select('source_reference, relation_type, description')
+          .eq('target_reference', centerReference)
+          .limit(15)
+      ])
+
+      const directRefs = new Set<string>()
+      for (const r of (srcRels.data || [])) {
+        if (!directRefs.has(r.target_reference)) {
+          connectedVerses.push({
+            reference: r.target_reference,
+            depth: 1,
+            relationType: r.relation_type,
+            relationDescription: r.description,
+            path: [centerReference, r.target_reference]
+          })
+          directRefs.add(r.target_reference)
+        }
+      }
+      for (const r of (tgtRels.data || [])) {
+        if (!directRefs.has(r.source_reference)) {
+          connectedVerses.push({
+            reference: r.source_reference,
+            depth: 1,
+            relationType: r.relation_type,
+            relationDescription: r.description,
+            path: [centerReference, r.source_reference]
+          })
+          directRefs.add(r.source_reference)
+        }
+      }
+      if (connectedVerses.length > 0) {
+        console.log(`[buildVerseGraph] RPC fallback: ${connectedVerses.length}개 직접 관계 발견`)
+      }
+    } catch (e) {
+      console.warn('[buildVerseGraph] verse_relations 직접 조회 실패:', e)
+    }
+  }
   timings['1_getConnectedVerses'] = Date.now() - startBFS
 
   // 모든 필요한 구절 참조 수집
@@ -1890,23 +1937,41 @@ export async function findSemanticRelations(
   limit: number = 5,
   version: string = 'GAE'
 ): Promise<{ reference: string; similarity: number }[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
-    // 먼저 해당 구절의 임베딩 가져오기
-    const { data: sourceData } = await client
+    // 먼저 해당 구절의 임베딩 가져오기 (bible_chunks → bible_verses fallback)
+    let embedding = null
+
+    const { data: chunkData } = await client
       .from('bible_chunks')
       .select('embedding')
       .eq('reference_full', reference)
       .limit(1)
       .single()
 
-    if (!sourceData?.embedding) return []
+    if (chunkData?.embedding) {
+      embedding = chunkData.embedding
+    } else {
+      // bible_chunks에 없으면 bible_verses에서 조회
+      const { data: verseData } = await client
+        .from('bible_verses')
+        .select('embedding')
+        .eq('reference', reference)
+        .limit(1)
+        .single()
+
+      if (verseData?.embedding) {
+        embedding = verseData.embedding
+      }
+    }
+
+    if (!embedding) return []
 
     // 유사한 구절 검색 (버전 필터를 RPC에서 지원하지 않으면 클라이언트 사이드 필터)
     const { data, error } = await client.rpc('match_bible_chunks', {
-      query_embedding: sourceData.embedding,
+      query_embedding: embedding,
       match_threshold: threshold,
       match_count: (limit + 1) * 3  // 버전 필터링 후에도 충분한 결과를 얻기 위해 더 많이 가져옴
     })
@@ -1966,7 +2031,7 @@ export interface BibleEvent {
  * 구절에 등장하는 인물 가져오기
  */
 export async function getVersePeople(reference: string): Promise<BiblePerson[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -1990,7 +2055,7 @@ export async function getVersePeople(reference: string): Promise<BiblePerson[]> 
  * 구절에 언급된 장소 가져오기
  */
 export async function getVersePlaces(reference: string): Promise<BiblePlace[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2013,7 +2078,7 @@ export async function getVersePlaces(reference: string): Promise<BiblePlace[]> {
  * 인물 정보 가져오기
  */
 export async function getPerson(personId: string): Promise<BiblePerson | null> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return null
 
   try {
@@ -2045,7 +2110,7 @@ export async function getPersonVerses(
   personId: string,
   maxResults: number = 10
 ): Promise<{ reference: string; role: string; context: string }[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2068,7 +2133,7 @@ export async function getPersonVerses(
 export async function getRelatedPeople(
   personId: string
 ): Promise<{ id: string; nameKorean: string; relationship: string }[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2092,7 +2157,7 @@ export async function getRelatedPeople(
  * 장소 정보 가져오기
  */
 export async function getPlace(placeId: string): Promise<BiblePlace | null> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return null
 
   try {
@@ -2122,7 +2187,7 @@ export async function getPlace(placeId: string): Promise<BiblePlace | null> {
  * 사건 정보 가져오기
  */
 export async function getEvent(eventId: string): Promise<BibleEvent | null> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return null
 
   try {
@@ -2156,7 +2221,7 @@ export async function getEvent(eventId: string): Promise<BibleEvent | null> {
 export async function getEventPeople(
   eventId: string
 ): Promise<{ person: BiblePerson; role: string }[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2199,7 +2264,7 @@ export async function getEventPeople(
 export async function getEventPlaces(
   eventId: string
 ): Promise<{ place: BiblePlace; role: string }[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2245,7 +2310,7 @@ export async function searchPeople(
   query: string,
   limit: number = 10
 ): Promise<BiblePerson[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2277,7 +2342,7 @@ export async function searchPlaces(
   query: string,
   limit: number = 10
 ): Promise<BiblePlace[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2310,7 +2375,7 @@ export async function searchEvents(
   query: string,
   limit: number = 10
 ): Promise<BibleEvent[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2354,7 +2419,7 @@ export async function getVersesRelationsForChat(
   }>
   explanationText: string
 }> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client || references.length === 0) {
     return { relations: [], explanationText: '' }
   }
@@ -2419,7 +2484,7 @@ export async function getVersesRelationsForChat(
 export async function getThemesMaster(
   category?: string
 ): Promise<{ id: string; nameKorean: string; nameEnglish: string; category: string }[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) return []
 
   try {
@@ -2454,7 +2519,7 @@ export async function getThemesMaster(
  * 활성화된 성경 버전 목록 가져오기
  */
 export async function getBibleVersions(): Promise<BibleVersion[]> {
-  const client = getSupabase()
+  const client = getSupabaseAdmin() || getSupabase()
   if (!client) {
     // DB가 없으면 기본 버전 반환
     return [{
