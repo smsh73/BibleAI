@@ -125,8 +125,6 @@ function parseBibleReferences(text: string): React.ReactNode[] {
       <a
         key={`${match.index}-${fullReference}`}
         href={verseMapUrl}
-        target="_blank"
-        rel="noopener noreferrer"
         className="text-amber-700 hover:text-amber-900 underline decoration-amber-300 hover:decoration-amber-500 transition-colors font-medium"
         title={`${fullReference} 구절 맵에서 보기`}
       >
@@ -1121,8 +1119,6 @@ export default function Home() {
                       </div>
                       <a
                         href={`/verse-map?reference=${encodeURIComponent(verseReferences[0]?.reference || '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="text-xs text-amber-600 hover:text-amber-800 flex items-center gap-1 transition-colors"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1138,8 +1134,6 @@ export default function Home() {
                         <a
                           key={idx}
                           href={`/verse-map?reference=${encodeURIComponent(verse.reference)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="block bg-white/90 rounded-xl p-3 hover:bg-amber-50 hover:shadow-md transition-all cursor-pointer group border border-amber-100"
                         >
                           <div className="flex items-start gap-3">
