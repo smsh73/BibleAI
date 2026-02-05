@@ -11,6 +11,7 @@ import { EMOTIONS, type EmotionType, type ChatMessage } from '@/types'
 import JesusSilhouette from '@/components/JesusSilhouette'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { PrayingHandsIcon, WaveText, PrayingHandsLoader } from '@/components/LoadingAnimations'
+import ResponsiveNav from '@/components/ResponsiveNav'
 
 interface VerseReference {
   reference: string
@@ -947,19 +948,7 @@ export default function Home() {
                   {activeTab === 'bible' ? t('bible.title') : activeTab === 'news' ? t('news.title') : t('bulletin.title')}
                 </h1>
               </div>
-              <nav className="flex items-center gap-3 text-sm text-gray-600 font-medium">
-                <a href="/" className="hover:text-gray-900 hover:underline">{t('common.home')}</a>
-                <span className="text-gray-300">|</span>
-                <a href="/verse-map" className="hover:text-gray-900 hover:underline">{t('common.verseMap')}</a>
-                <span className="text-gray-300">|</span>
-                <a href="/youtube" className="hover:text-gray-900 hover:underline">{t('common.sermon')}</a>
-                <span className="text-gray-300">|</span>
-                <a href="/news" className="hover:text-gray-900 hover:underline">{t('common.news')}</a>
-                <span className="text-gray-300">|</span>
-                <a href="/bulletin" className="hover:text-gray-900 hover:underline">{t('common.bulletin')}</a>
-                <span className="text-gray-300">|</span>
-                <a href="/admin" className="hover:text-gray-900 hover:underline">{t('common.admin')}</a>
-              </nav>
+              <ResponsiveNav />
             </div>
 
             {/* 탭 버튼 */}

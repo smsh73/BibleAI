@@ -9,6 +9,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { PrayingHandsLoader } from '@/components/LoadingAnimations'
+import ResponsiveNav from '@/components/ResponsiveNav'
 
 interface ChatMessage {
   id: string
@@ -492,19 +493,7 @@ export default function NewsPage() {
               </div>
               <h1 className="text-lg font-semibold text-amber-900">열한시 뉴스</h1>
             </div>
-            <nav className="flex items-center gap-3 text-sm text-gray-600 font-medium">
-              <a href="/" className="hover:text-gray-900 hover:underline">홈</a>
-              <span className="text-gray-300">|</span>
-              <a href="/verse-map" className="hover:text-gray-900 hover:underline">성경지도</a>
-              <span className="text-gray-300">|</span>
-              <a href="/youtube" className="hover:text-gray-900 hover:underline">설교</a>
-              <span className="text-gray-300">|</span>
-              <a href="/news" className="hover:text-gray-900 hover:underline">신문</a>
-              <span className="text-gray-300">|</span>
-              <a href="/bulletin" className="hover:text-gray-900 hover:underline">주보</a>
-              <span className="text-gray-300">|</span>
-              <a href="/admin" className="hover:text-gray-900 hover:underline">관리</a>
-            </nav>
+            <ResponsiveNav />
           </div>
 
           {/* 탭 버튼 */}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import ResponsiveNav from '@/components/ResponsiveNav'
 
 // 타입 정의
 interface Church {
@@ -479,18 +480,16 @@ export default function ChurchDictionaryAdmin() {
                   ))}
                 </select>
               </div>
-              <nav className="flex items-center gap-3 text-sm text-gray-600 font-medium">
-                <a href="/" className="hover:text-gray-900 hover:underline">홈</a>
-                <span className="text-gray-300">|</span>
-                <a href="/admin" className="hover:text-gray-900 hover:underline">관리자</a>
-                <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-3">
+                <ResponsiveNav />
+                <span className="text-gray-300 hidden sm:inline">|</span>
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="text-indigo-700 hover:text-indigo-900 hover:underline"
+                  className="text-indigo-700 hover:text-indigo-900 hover:underline text-sm font-medium"
                 >
                   교회 추가
                 </button>
-              </nav>
+              </div>
             </div>
 
             {/* 탭 */}

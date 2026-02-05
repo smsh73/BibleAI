@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { AIProvider } from '@/types'
+import ResponsiveNav from '@/components/ResponsiveNav'
 
 interface ApiKeyData {
   id: string
@@ -345,19 +346,7 @@ export default function AdminPage() {
               </div>
               <h1 className="text-lg font-semibold text-amber-900">관리자</h1>
             </div>
-            <nav className="flex items-center gap-3 text-sm text-gray-600 font-medium">
-              <Link href="/" className="hover:text-gray-900 hover:underline">홈</Link>
-              <span className="text-gray-300">|</span>
-              <Link href="/verse-map" className="hover:text-gray-900 hover:underline">성경지도</Link>
-              <span className="text-gray-300">|</span>
-              <Link href="/youtube" className="hover:text-gray-900 hover:underline">설교</Link>
-              <span className="text-gray-300">|</span>
-              <Link href="/news" className="hover:text-gray-900 hover:underline">신문</Link>
-              <span className="text-gray-300">|</span>
-              <Link href="/bulletin" className="hover:text-gray-900 hover:underline">주보</Link>
-              <span className="text-gray-300">|</span>
-              <Link href="/admin" className="hover:text-gray-900 hover:underline">관리</Link>
-            </nav>
+            <ResponsiveNav />
           </div>
 
           {/* 탭 버튼 */}

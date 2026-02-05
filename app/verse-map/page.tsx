@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import dynamic from 'next/dynamic'
+import ResponsiveNav from '@/components/ResponsiveNav'
 
 // 그래프 시각화 컴포넌트 (SSR 비활성화)
 const VerseGraphVisualization = dynamic(
@@ -349,19 +350,7 @@ export default function VerseMapPage() {
               </div>
               <h1 className="text-lg font-semibold text-amber-900">{t('verseMap.title')}</h1>
             </div>
-            <nav className="flex items-center gap-3 text-sm text-gray-600 font-medium">
-              <a href="/" className="hover:text-gray-900 hover:underline">{t('common.home')}</a>
-              <span className="text-gray-300">|</span>
-              <a href="/verse-map" className="hover:text-gray-900 hover:underline">{t('common.verseMap')}</a>
-              <span className="text-gray-300">|</span>
-              <a href="/youtube" className="hover:text-gray-900 hover:underline">{t('common.sermon')}</a>
-              <span className="text-gray-300">|</span>
-              <a href="/news" className="hover:text-gray-900 hover:underline">{t('common.news')}</a>
-              <span className="text-gray-300">|</span>
-              <a href="/bulletin" className="hover:text-gray-900 hover:underline">{t('common.bulletin')}</a>
-              <span className="text-gray-300">|</span>
-              <a href="/admin" className="hover:text-gray-900 hover:underline">{t('common.admin')}</a>
-            </nav>
+            <ResponsiveNav />
           </div>
         </div>
       </header>

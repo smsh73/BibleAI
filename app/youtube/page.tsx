@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import ResponsiveNav from '@/components/ResponsiveNav'
 
 interface ProcessedSermon {
   video_id: string
@@ -430,19 +431,7 @@ export default function YouTubePage() {
               </div>
               <h1 className="text-lg font-semibold text-amber-900">설교 추출</h1>
             </div>
-            <nav className="flex items-center gap-3 text-sm text-gray-600 font-medium">
-              <a href="/" className="hover:text-gray-900 hover:underline">홈</a>
-              <span className="text-gray-300">|</span>
-              <a href="/verse-map" className="hover:text-gray-900 hover:underline">성경지도</a>
-              <span className="text-gray-300">|</span>
-              <a href="/youtube" className="hover:text-gray-900 hover:underline">설교</a>
-              <span className="text-gray-300">|</span>
-              <a href="/news" className="hover:text-gray-900 hover:underline">신문</a>
-              <span className="text-gray-300">|</span>
-              <a href="/bulletin" className="hover:text-gray-900 hover:underline">주보</a>
-              <span className="text-gray-300">|</span>
-              <a href="/admin" className="hover:text-gray-900 hover:underline">관리</a>
-            </nav>
+            <ResponsiveNav />
           </div>
         </div>
       </header>
