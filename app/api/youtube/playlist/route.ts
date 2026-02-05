@@ -233,8 +233,8 @@ async function processVideo(
 }
 
 export async function POST(req: NextRequest) {
-  // 기본 URL 추출
-  const baseUrl = `${req.nextUrl.protocol}//${req.nextUrl.host}`
+  // 기본 URL 추출 (내부 호출은 항상 HTTP로 - Replit 등에서 SSL 오류 방지)
+  const baseUrl = `http://${req.nextUrl.host}`
   let lockAcquired = false
 
   try {
