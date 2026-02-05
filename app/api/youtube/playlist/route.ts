@@ -378,6 +378,18 @@ export async function POST(req: NextRequest) {
         continue
       }
 
+      // 비공개/삭제된 동영상 스킵
+      if (video.title === '[Private video]' || video.title === '[Deleted video]') {
+        console.log(`[Playlist] 스킵 (비공개/삭제됨): ${video.title} (${video.videoId})`)
+        results.push({
+          videoId: video.videoId,
+          title: video.title,
+          status: 'skipped'
+        })
+        skippedCount++
+        continue
+      }
+
       console.log(`[Playlist] 처리 중 (${processedCount + 1}/${maxVideos}): ${video.title} (${video.videoId})`)
 
       let retryCount = 0

@@ -144,8 +144,9 @@ export async function downloadYouTubeAudio(
   }
 
   // 브라우저 쿠키 옵션 (SABR 스트리밍 제한 우회용)
-  // 우선순위: Chrome → Firefox → Safari → 쿠키 없이 시도
-  const browserOptions = ['chrome', 'firefox', 'safari', '']
+  // 서버 환경(Linux/Replit)에서는 브라우저 쿠키가 없으므로 바로 쿠키 없이 시도
+  const isServer = process.platform === 'linux' && !process.env.DISPLAY
+  const browserOptions = isServer ? [''] : ['chrome', 'firefox', 'safari', '']
 
   for (const browser of browserOptions) {
     try {
