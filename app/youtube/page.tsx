@@ -135,7 +135,7 @@ function formatTimeMMSS(seconds: number): string {
 }
 
 export default function YouTubePage() {
-  const [videoUrl, setVideoUrl] = useState('https://youtu.be/Ygj_ueI1y-M?si=OSK_cH9SR-ZaG2We')
+  const [videoUrl, setVideoUrl] = useState('')
   const [useSTT, setUseSTT] = useState(true) // STT 사용 여부 (기본값: true)
   const [autoDetect, setAutoDetect] = useState(false) // 자동 감지 여부
   const [extractSermonOnly, setExtractSermonOnly] = useState(false)
@@ -178,6 +178,14 @@ export default function YouTubePage() {
     description?: string
     elapsedMinutes?: number
   }>({ locked: false })
+
+  // localStorage에서 마지막 사용한 YouTube URL 불러오기
+  useEffect(() => {
+    const savedUrl = localStorage.getItem('lastYoutubeUrl')
+    if (savedUrl) {
+      setVideoUrl(savedUrl)
+    }
+  }, [])
 
   // 처리된 설교 목록 로드 (설교 작업 진행 중이면 주기적 갱신)
   useEffect(() => {
@@ -234,6 +242,11 @@ export default function YouTubePage() {
     setError(null)
     setResult(null)
     setPlaylistResult(null)
+
+    // 마지막 사용한 YouTube URL 저장
+    if (videoUrl.trim()) {
+      localStorage.setItem('lastYoutubeUrl', videoUrl.trim())
+    }
 
     try {
       // 플레이리스트인 경우

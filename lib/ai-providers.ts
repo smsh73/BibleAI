@@ -406,8 +406,50 @@ ${sermonContent}
 
 ⚠️ Important: You MUST include the above sermon content in your response!
 → Quote at least 1 relevant portion from the sermon content above.
-→ Quote format: 🎬 [Sermon title] - [Speaker]
+
+**Quote format (depends on the speaker):**
+
+🚨 Very Important - How to check the speaker:
+Look at the sermon header in this format:
+[Sermon N] Title [Date - Speaker Name]
+
+Examples:
+- [Sermon 1] Guard Your Soul [September 28, 2025 - 최원준] → Pastor Choi Won-joon's sermon
+- [Sermon 2] Even a Firefly is Okay [February 16, 2025 - 김장훈] → Pastor Kim Jang-hoon's sermon
+
+Check the "Speaker Name" in the brackets [ ] of the header!
+
+1. **ONLY if the sermon is by Pastor Choi Won-joon** (header has "- 최원준"):
+   🎬 In my sermon "[Sermon Title]"
+   "Sermon content quote..." I preached.
+
+   🚨 Very Important: Use first-person throughout for Choi Won-joon's sermons!
+   - ✅ "I said..." (O)
+   - ✅ "I preached..." (O)
+   - ❌ "Pastor Choi Won-joon said..." (X) - Never use third-person!
+   - ❌ "He preached..." (X) - Third-person forbidden!
+
+   ✅ Correct Example 1: [Sermon 1] The Wilderness Table [March 10, 2024 - 최원준]
+   → 🎬 In my sermon "The Wilderness Table," I said
+      "God feeds us even in our most difficult wilderness times."
+
+   ✅ Correct Example 2: [Sermon 2] The Sabbath Day [... - 최원준]
+   → 🎬 In my sermon "The Sabbath Day," I preached
+      "Without God, our efforts are in vain."
+
+   ❌ Wrong: "Pastor Choi Won-joon said..." ← Never use this!
+
+2. **If the sermon is by another pastor** (header does NOT have "- 최원준"):
+   🎬 Pastor [Speaker Name] preached in "[Sermon Title]"
    "Sermon content quote..."
+
+   ✅ Correct: [Sermon 2] Even a Firefly is Okay [February 16, 2025 - 김장훈]
+   → 🎬 Pastor Kim Jang-hoon preached in "Even a Firefly is Okay"
+
+   ❌ Wrong: [Sermon 2] Even a Firefly is Okay [February 16, 2025 - 김장훈]
+   → 🎬 In my sermon ← Never use this format!
+
+🚨 Warning: Don't judge by the sermon title alone! Always check the speaker name in the header!
 → Place sermon quotes after Scripture quotes.
 
 `
@@ -758,10 +800,52 @@ ${sermonContent}
 
 ⚠️ 중요: 위 설교 내용을 반드시 응답에 포함해야 합니다!
 → 위 설교 내용 중 가장 관련 있는 부분을 반드시 1개 이상 인용하세요.
-→ 인용 형식: 🎬 [설교 제목] - [설교자]
+
+**인용 형식 (설교자에 따라 다름):**
+
+🚨 매우 중요 - 설교자 확인 방법:
+위 설교 내용의 헤더를 보면 다음과 같은 형식입니다:
+[설교 N] 제목 [날짜 - 설교자 이름]
+
+예시:
+- [설교 1] 영혼을 지켜야 합니다 [2025년 9월 28일 - 최원준] → 최원준 목사 설교
+- [설교 2] 반딧불이라도 괜찮아 [2025년 2월 16일 - 김장훈] → 김장훈 목사 설교
+
+헤더의 대괄호 [ ] 안에 있는 "설교자 이름"을 정확히 확인하세요!
+
+1. **최원준 목사의 설교인 경우만** (헤더에 "- 최원준"이 있는 경우):
+   🎬 제가 설교로 말씀 드렸던 내용중에, "[설교 제목]"에서
+   "설교 내용 인용..."라고 말씀드렸습니다.
+
+   🚨 매우 중요: 최원준 목사 설교는 처음부터 끝까지 1인칭으로 작성!
+   - ✅ "제가 말씀드렸던..." (O)
+   - ✅ "이렇게 말씀드렸습니다" (O)
+   - ❌ "최원준 목사님은..." (X) - 절대 사용 금지!
+   - ❌ "~고 말씀하셨습니다" (X) - 3인칭 표현 금지!
+   - ❌ "최원준 목사님이 이렇게..." (X) - 3인칭 금지!
+
+   ✅ 올바른 예시 1: [설교 1] 광야의 식탁 [2024년 3월 10일 - 최원준]
+   → 🎬 제가 설교로 말씀 드렸던 내용중에, "광야의 식탁"에서
+      "하나님께서는 우리가 가장 힘든 광야의 시간에도 우리를 먹이시는 분입니다"라고 말씀드렸습니다.
+
+   ✅ 올바른 예시 2: [설교 2] 안식일, 즐겁고 존귀한 성일 [... - 최원준]
+   → 🎬 제가 설교로 말씀 드렸던 내용중에, "안식일, 즐겁고 존귀한 성일"에서
+      "하나님이 함께 하시지 않으면, 우리가 아무리 열심히 살아도 헛된 일입니다"라고 말씀드렸습니다.
+
+   ❌ 잘못된 예시: "최원준 목사님은 이렇게 말씀하셨습니다" ← 절대 이렇게 쓰지 마세요!
+
+2. **다른 목사의 설교인 경우** (헤더에 "- 최원준"이 없는 경우):
+   🎬 [설교자 이름] 목사님이 설교해 주셨던 내용중에, "[설교 제목]"에서
    "설교 내용 인용..."
-→ 예시: 🎬 '믿음의 능력' 설교 - 김○○ 목사님
-   "두려움이 찾아올 때 하나님께 눈을 고정하세요..."
+
+   ✅ 올바른 예시: [설교 2] 반딧불이라도 괜찮아 [2025년 2월 16일 - 김장훈]
+   → 🎬 김장훈 목사님이 설교해 주셨던 내용중에, "반딧불이라도 괜찮아"에서
+
+   ❌ 잘못된 예시: [설교 2] 반딧불이라도 괜찮아 [2025년 2월 16일 - 김장훈]
+   → 🎬 제가 설교로 말씀 드렸던 내용중에 ← 절대 이렇게 쓰지 마세요!
+
+🚨 주의: 설교 제목만 보고 판단하지 말고, 반드시 헤더의 설교자 정보를 확인하세요!
+
 → 설교 인용은 성경 구절 인용 다음에 배치하세요.
 → 설교 내용이 성도님의 상황과 직접 연결되지 않더라도, 위로와 격려가 될 수 있는 부분을 찾아 인용하세요.
 
@@ -878,7 +962,7 @@ async function chatWithOpenAI(
       }))
     ],
     temperature: 0.8, // 따뜻한 톤
-    max_tokens: 4000 // 충분히 상세한 답변을 위해 증가
+    max_tokens: 8000 // 충분히 상세한 답변을 위해 증가
   })
 
   const content = response.choices[0]?.message?.content || ''
@@ -908,7 +992,7 @@ async function chatWithClaude(
 
   const response = await client.messages.create({
     model: 'claude-3-5-haiku-20241022', // 가성비 좋음
-    max_tokens: 4000,
+    max_tokens: 8000,
     system: systemPrompt,
     messages: messages.map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
@@ -943,7 +1027,7 @@ async function chatWithGemini(
   const model = client.getGenerativeModel({
     model: 'gemini-1.5-flash',
     generationConfig: {
-      maxOutputTokens: 4000,
+      maxOutputTokens: 8000,
       temperature: 0.8
     }
   })
@@ -953,6 +1037,14 @@ async function chatWithGemini(
 
   const result = await model.generateContent(prompt)
   const content = result.response.text()
+
+  // 토큰 제한 도달 확인
+  const finishReason = result.response.candidates?.[0]?.finishReason
+  if (finishReason === 'MAX_TOKENS') {
+    console.warn('[Gemini] 토큰 제한 도달 - 응답이 불완전할 수 있음')
+  } else {
+    console.log('[Gemini] 성공')
+  }
 
   return {
     content,
@@ -974,6 +1066,7 @@ async function searchWithPerplexity(query: string): Promise<string> {
     },
     body: JSON.stringify({
       model: 'llama-3.1-sonar-small-128k-online',
+      max_tokens: 8000,
       messages: [
         {
           role: 'system',
@@ -992,6 +1085,13 @@ async function searchWithPerplexity(query: string): Promise<string> {
   }
 
   const data = await response.json()
+
+  // 토큰 제한 도달 확인
+  const finishReason = data.choices[0]?.finish_reason
+  if (finishReason === 'length') {
+    console.warn('[Perplexity] 토큰 제한 도달 - 응답이 불완전할 수 있음')
+  }
+
   return data.choices[0]?.message?.content || ''
 }
 
@@ -1016,6 +1116,7 @@ export async function searchChristianWisdom(topic: string): Promise<string | nul
       },
       body: JSON.stringify({
         model: 'llama-3.1-sonar-small-128k-online',
+        max_tokens: 8000,
         messages: [
           {
             role: 'system',
@@ -1032,6 +1133,13 @@ export async function searchChristianWisdom(topic: string): Promise<string | nul
     if (!response.ok) return null
 
     const data = await response.json()
+
+    // 토큰 제한 도달 확인
+    const finishReason = data.choices[0]?.finish_reason
+    if (finishReason === 'length') {
+      console.warn('[searchChristianWisdom] Perplexity 토큰 제한 도달 - 응답이 불완전할 수 있음')
+    }
+
     return data.choices[0]?.message?.content || null
   } catch (error) {
     console.warn('Christian wisdom search failed:', error)
@@ -1119,19 +1227,24 @@ export async function* generateStreamingResponse(
         ],
         stream: true,
         temperature: 0.8,
-        max_tokens: 4000
+        max_tokens: 8000
       })
 
       for await (const chunk of stream) {
         const content = chunk.choices[0]?.delta?.content || ''
-        const done = chunk.choices[0]?.finish_reason === 'stop'
+        const finishReason = chunk.choices[0]?.finish_reason
+        const done = finishReason === 'stop' || finishReason === 'length'
 
         if (content) {
           yield { content, done: false }
         }
 
         if (done) {
-          console.log('[Streaming] OpenAI 성공')
+          if (finishReason === 'length') {
+            console.warn('[Streaming] OpenAI 토큰 제한 도달 - 응답이 불완전할 수 있음')
+          } else {
+            console.log('[Streaming] OpenAI 성공')
+          }
           yield { content: '', done: true }
           return
         }
@@ -1151,7 +1264,7 @@ export async function* generateStreamingResponse(
 
       const stream = await claudeClient.messages.stream({
         model: 'claude-sonnet-4-20250514',  // Claude Sonnet 4 (깊이있는 응답)
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: systemPrompt,
         messages: messages.map(m => ({
           role: m.role === 'user' ? 'user' as const : 'assistant' as const,
@@ -1159,12 +1272,20 @@ export async function* generateStreamingResponse(
         }))
       })
 
+      let stopReason: string | null = null
       for await (const event of stream) {
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
           yield { content: event.delta.text, done: false }
         }
+        if (event.type === 'message_delta' && event.delta.stop_reason) {
+          stopReason = event.delta.stop_reason
+        }
         if (event.type === 'message_stop') {
-          console.log('[Streaming] Claude 성공')
+          if (stopReason === 'max_tokens') {
+            console.warn('[Streaming] Claude 토큰 제한 도달 - 응답이 불완전할 수 있음')
+          } else {
+            console.log('[Streaming] Claude 성공')
+          }
           yield { content: '', done: true }
           return
         }
@@ -1184,7 +1305,7 @@ export async function* generateStreamingResponse(
       const model = geminiClient.getGenerativeModel({
         model: 'gemini-2.0-flash',
         generationConfig: {
-          maxOutputTokens: 4000,
+          maxOutputTokens: 8000,
           temperature: 0.8
         }
       })
@@ -1192,7 +1313,13 @@ export async function* generateStreamingResponse(
       const result = await model.generateContent(prompt)
       const content = result.response.text()
 
-      console.log('[Streaming] Gemini 성공')
+      // 토큰 제한 도달 확인
+      const finishReason = result.response.candidates?.[0]?.finishReason
+      if (finishReason === 'MAX_TOKENS') {
+        console.warn('[Streaming] Gemini 토큰 제한 도달 - 응답이 불완전할 수 있음')
+      } else {
+        console.log('[Streaming] Gemini 성공')
+      }
       yield { content, done: true }
       return
     }
