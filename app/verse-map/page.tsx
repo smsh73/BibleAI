@@ -13,7 +13,7 @@ import ResponsiveNav from '@/components/ResponsiveNav'
 // 그래프 시각화 컴포넌트 (SSR 비활성화)
 const VerseGraphVisualization = dynamic(
   () => import('@/components/VerseGraphVisualization'),
-  { ssr: false, loading: () => <div className="h-[500px] flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full" /></div> }
+  { ssr: false, loading: () => <div className="h-[500px] flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-rose-300 border-t-transparent rounded-full" /></div> }
 )
 
 type ViewMode = 'card' | 'graph'
@@ -336,19 +336,19 @@ export default function VerseMapPage() {
     <div className="relative flex flex-col min-h-screen overflow-hidden">
       {/* 배경 */}
       <div className="absolute inset-0 bg-white" />
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-white to-orange-50" />
+      <div className="absolute inset-0 bg-gradient-to-b from-rose-50/20 via-white to-rose-50/30" />
 
       {/* 헤더 */}
       <header className="relative z-10 flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-gradient-to-br from-rose-400 to-rose-500 rounded-lg flex items-center justify-center">
                 <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                 </svg>
               </div>
-              <h1 className="text-lg font-semibold text-amber-900">{t('verseMap.title')}</h1>
+              <h1 className="text-lg font-semibold text-rose-800">{t('verseMap.title')}</h1>
             </div>
             <ResponsiveNav />
           </div>
@@ -356,13 +356,13 @@ export default function VerseMapPage() {
       </header>
 
       {/* 검색 바 */}
-      <div className="relative z-10 bg-white/80 backdrop-blur-sm border-b border-amber-100 sticky top-0">
+      <div className="relative z-10 bg-white/80 backdrop-blur-sm border-b border-rose-100/50 sticky top-0">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center gap-4">
             {history.length > 0 && (
               <button
                 onClick={handleBack}
-                className="text-amber-600 hover:text-amber-700 text-sm flex items-center gap-1"
+                className="text-rose-500 hover:text-rose-600 text-sm flex items-center gap-1"
               >
                 ← {t('verseMap.back')}
               </button>
@@ -375,11 +375,11 @@ export default function VerseMapPage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={t('verseMap.searchPlaceholder')}
-                className="flex-1 px-4 py-2 border border-amber-200 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 text-sm text-gray-900 bg-white"
+                className="flex-1 px-4 py-2 border border-rose-200 rounded-full focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300 text-sm text-gray-900 bg-white"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm whitespace-nowrap shadow-sm transition-colors"
+                className="px-4 py-2 bg-rose-400 hover:bg-rose-500 text-white rounded-full text-sm whitespace-nowrap shadow-sm transition-colors"
               >
                 {t('verseMap.explore')}
               </button>
@@ -393,8 +393,8 @@ export default function VerseMapPage() {
         {loading && (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <div className="animate-spin w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full mx-auto" />
-              <p className="mt-4 text-amber-700">{t('verseMap.loading')}</p>
+              <div className="animate-spin w-10 h-10 border-4 border-rose-300 border-t-transparent rounded-full mx-auto" />
+              <p className="mt-4 text-rose-600">{t('verseMap.loading')}</p>
             </div>
           </div>
         )}
@@ -414,10 +414,10 @@ export default function VerseMapPage() {
           <div className="space-y-6">
             {/* 헤더 */}
             <div className="text-center">
-              <h2 className="text-xl font-bold text-amber-800 mb-2">
+              <h2 className="text-xl font-bold text-rose-800 mb-2">
                 {t('verseMap.welcomeTitle')}
               </h2>
-              <p className="text-amber-600 text-sm">
+              <p className="text-rose-500 text-sm">
                 {language === 'en' ? 'Select a book, chapter, and verse to explore connections' : '책을 선택하고 장과 절을 클릭하세요'}
               </p>
             </div>
@@ -425,14 +425,13 @@ export default function VerseMapPage() {
             {/* 구약/신약 구분 */}
             {['old', 'new'].map((testament) => (
               <div key={testament} className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wider border-b border-gray-200 pb-1">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 pb-1">
                   {testament === 'old' ? (language === 'en' ? 'Old Testament' : '구약') : (language === 'en' ? 'New Testament' : '신약')}
                 </h3>
 
-                {/* 책 그리드 */}
+                {/* 책 그리드 - 심플한 디자인 */}
                 <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13 gap-1">
                   {BIBLE_BOOKS.filter(b => b.testament === testament).map((book) => {
-                    const colors = CATEGORY_COLORS[book.category]
                     const isSelected = selectedBook?.name === book.name
 
                     return (
@@ -441,8 +440,10 @@ export default function VerseMapPage() {
                         onClick={() => handleBookClick(book)}
                         className={`
                           px-1.5 py-2 rounded-lg text-xs font-medium transition-all
-                          border ${colors.border} ${colors.text}
-                          ${isSelected ? `${colors.bg} ring-2 ring-offset-1 ring-amber-400 shadow-md` : `bg-white ${colors.hover}`}
+                          ${isSelected
+                            ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-300 shadow-sm'
+                            : 'bg-white border border-gray-200 text-gray-600 hover:border-rose-200 hover:text-rose-600'
+                          }
                         `}
                         title={book.name}
                       >
@@ -452,13 +453,13 @@ export default function VerseMapPage() {
                   })}
                 </div>
 
-                {/* 선택된 책의 장/절 표시 */}
+                {/* 선택된 책의 장/절 표시 - 모던하고 심플하게 */}
                 {selectedBook && selectedBook.testament === testament && (
-                  <div className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm animate-fade-in w-full">
+                  <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm animate-fade-in w-full">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold text-amber-800">
+                      <h4 className="font-semibold text-gray-800">
                         {selectedBook.name}
-                        <span className="text-sm text-gray-500 ml-2">
+                        <span className="text-sm text-gray-400 ml-2 font-normal">
                           ({selectedBook.chapters.length}{language === 'en' ? ' chapters' : '장'})
                         </span>
                       </h4>
@@ -470,12 +471,11 @@ export default function VerseMapPage() {
                       </button>
                     </div>
 
-                    {/* 장 그리드 - 고정 너비 그리드 (10열 고정) */}
+                    {/* 장 그리드 - 심플한 디자인 */}
                     <div className="grid grid-cols-10 gap-1 mb-3">
                       {selectedBook.chapters.map((verseCount, idx) => {
                         const chapter = idx + 1
                         const isChapterSelected = selectedChapter === chapter
-                        const colors = CATEGORY_COLORS[selectedBook.category]
 
                         return (
                           <button
@@ -484,8 +484,8 @@ export default function VerseMapPage() {
                             className={`
                               w-full aspect-square rounded-md text-xs font-medium transition-all
                               ${isChapterSelected
-                                ? `${colors.bg} ${colors.text} ring-2 ring-amber-400`
-                                : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-300'
+                                : 'bg-gray-50 text-gray-600 hover:bg-rose-50 hover:text-rose-600'
                               }
                             `}
                           >
@@ -495,30 +495,22 @@ export default function VerseMapPage() {
                       })}
                     </div>
 
-                    {/* 절 그리드 - 고정 너비 그리드 (10열 고정) */}
+                    {/* 절 그리드 - 심플한 디자인 */}
                     {selectedChapter && (
                       <div className="border-t border-gray-100 pt-3 animate-fade-in">
                         <p className="text-xs text-gray-500 mb-2">
                           {selectedBook.name} {selectedChapter}{language === 'en' ? ':' : '장'} - {language === 'en' ? 'Select verse' : '절 선택'}
                         </p>
                         <div className="grid grid-cols-10 gap-1 max-h-48 overflow-y-auto">
-                          {Array.from({ length: selectedBook.chapters[selectedChapter - 1] }, (_, i) => i + 1).map((verse) => {
-                            const colors = CATEGORY_COLORS[selectedBook.category]
-
-                            return (
-                              <button
-                                key={verse}
-                                onClick={() => handleVerseSelect(selectedBook, selectedChapter, verse)}
-                                className={`
-                                  w-full aspect-square rounded text-xs font-medium transition-all
-                                  bg-white border border-gray-200 text-gray-600
-                                  hover:${colors.bg} hover:${colors.text} hover:border-amber-300
-                                `}
-                              >
-                                {verse}
-                              </button>
-                            )
-                          })}
+                          {Array.from({ length: selectedBook.chapters[selectedChapter - 1] }, (_, i) => i + 1).map((verse) => (
+                            <button
+                              key={verse}
+                              onClick={() => handleVerseSelect(selectedBook, selectedChapter, verse)}
+                              className="w-full aspect-square rounded text-xs font-medium transition-all bg-white border border-gray-200 text-gray-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200"
+                            >
+                              {verse}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}
@@ -527,33 +519,11 @@ export default function VerseMapPage() {
               </div>
             ))}
 
-            {/* 범례 */}
-            <div className="mt-6 pt-4 border-t border-gray-200">
-              <p className="text-xs text-gray-500 text-center mb-3">{language === 'en' ? 'Book Categories' : '책 분류'}</p>
-              <div className="flex flex-wrap justify-center gap-2">
-                {[
-                  { key: 'law', label: language === 'en' ? 'Law' : '율법서' },
-                  { key: 'history', label: language === 'en' ? 'History' : '역사서' },
-                  { key: 'poetry', label: language === 'en' ? 'Poetry' : '시가서' },
-                  { key: 'major_prophet', label: language === 'en' ? 'Major Prophets' : '대선지서' },
-                  { key: 'minor_prophet', label: language === 'en' ? 'Minor Prophets' : '소선지서' },
-                  { key: 'gospel', label: language === 'en' ? 'Gospels' : '복음서' },
-                  { key: 'acts', label: language === 'en' ? 'Acts' : '사도행전' },
-                  { key: 'pauline', label: language === 'en' ? 'Pauline' : '바울서신' },
-                  { key: 'general', label: language === 'en' ? 'General' : '일반서신' },
-                  { key: 'revelation', label: language === 'en' ? 'Revelation' : '요한계시록' }
-                ].map(({ key, label }) => {
-                  const colors = CATEGORY_COLORS[key]
-                  return (
-                    <span
-                      key={key}
-                      className={`px-2 py-1 rounded text-xs ${colors.bg} ${colors.text} border ${colors.border}`}
-                    >
-                      {label}
-                    </span>
-                  )
-                })}
-              </div>
+            {/* 범례 - 심플하게 */}
+            <div className="mt-6 pt-4 border-t border-gray-100">
+              <p className="text-xs text-gray-400 text-center">
+                {language === 'en' ? 'Click a book to see chapters and verses' : '책을 클릭하여 장과 절을 선택하세요'}
+              </p>
             </div>
           </div>
         )}
@@ -565,7 +535,7 @@ export default function VerseMapPage() {
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={handleBackToMap}
-                className="flex items-center gap-1 text-sm text-amber-600 hover:text-amber-800 transition-colors"
+                className="flex items-center gap-1 text-sm text-rose-500 hover:text-rose-700 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -574,13 +544,13 @@ export default function VerseMapPage() {
               </button>
 
               {/* 뷰 모드 토글 */}
-              <div className="flex items-center gap-1 bg-amber-100 rounded-full p-1">
+              <div className="flex items-center gap-1 bg-rose-100/50 rounded-full p-1">
                 <button
                   onClick={() => setViewMode('card')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                     viewMode === 'card'
-                      ? 'bg-white text-amber-800 shadow-sm'
-                      : 'text-amber-600 hover:text-amber-800'
+                      ? 'bg-white text-rose-700 shadow-sm'
+                      : 'text-rose-500 hover:text-rose-700'
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -592,8 +562,8 @@ export default function VerseMapPage() {
                   onClick={() => setViewMode('graph')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                     viewMode === 'graph'
-                      ? 'bg-white text-amber-800 shadow-sm'
-                      : 'text-amber-600 hover:text-amber-800'
+                      ? 'bg-white text-rose-700 shadow-sm'
+                      : 'text-rose-500 hover:text-rose-700'
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -606,12 +576,12 @@ export default function VerseMapPage() {
 
             {/* 타이틀 */}
             <div className="text-center mb-6">
-              <h2 className="text-lg font-semibold text-amber-800">
+              <h2 className="text-lg font-semibold text-gray-800">
                 {language === 'en'
                   ? `Connections from "${centerNode.reference}"`
                   : `"${centerNode.reference}" 에서 시작하는 말씀의 연결`}
               </h2>
-              <p className="text-sm text-amber-600 mt-1">
+              <p className="text-sm text-gray-500 mt-1">
                 {viewMode === 'graph'
                   ? (language === 'en' ? 'Interactive network visualization of verse connections' : '성경 구절 연결의 네트워크 시각화')
                   : (language === 'en' ? 'Click a card to explore more connections' : '카드를 클릭하면 해당 구절의 연결을 더 탐색할 수 있습니다')}
@@ -632,32 +602,30 @@ export default function VerseMapPage() {
             {/* 카드 뷰 */}
             {viewMode === 'card' && (
               <>
-            {/* 중심 구절 카드 */}
-            <div className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-1 shadow-lg">
-              <div className="bg-white rounded-xl p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="text-xl font-bold text-amber-800">
-                    {centerNode.reference}
-                  </h3>
-                  <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs rounded-full">
-                    중심 구절
-                  </span>
-                </div>
-                {centerNode.content && (
-                  <p className="text-gray-700 leading-relaxed text-lg">
-                    "{centerNode.content}"
-                  </p>
-                )}
-                {centerNode.themes && centerNode.themes.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {centerNode.themes.slice(0, 5).map(theme => (
-                      <span key={theme} className="px-2 py-0.5 bg-amber-50 text-amber-600 text-xs rounded">
-                        #{theme}
-                      </span>
-                    ))}
-                  </div>
-                )}
+            {/* 중심 구절 카드 - 심플하고 모던하게 */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="text-xl font-bold text-gray-800">
+                  {centerNode.reference}
+                </h3>
+                <span className="px-3 py-1 bg-rose-100/80 text-rose-600 text-xs rounded-full font-medium">
+                  중심 구절
+                </span>
               </div>
+              {centerNode.content && (
+                <p className="text-gray-700 leading-relaxed text-lg">
+                  "{centerNode.content}"
+                </p>
+              )}
+              {centerNode.themes && centerNode.themes.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {centerNode.themes.slice(0, 5).map(theme => (
+                    <span key={theme} className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded">
+                      #{theme}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* 연결된 구절들 */}
@@ -665,7 +633,7 @@ export default function VerseMapPage() {
               const connected = getConnectedVerses(centerNode.reference)
               if (connected.length === 0) {
                 return (
-                  <div className="text-center py-8 text-amber-600">
+                  <div className="text-center py-8 text-gray-500">
                     <p>이 구절과 직접 연결된 구절이 없습니다.</p>
                     <p className="text-sm mt-1">다른 구절을 검색해 보세요.</p>
                   </div>
@@ -685,10 +653,10 @@ export default function VerseMapPage() {
               return (
                 <div className="space-y-6">
                   {/* 연결 요약 */}
-                  <div className="flex items-center justify-center gap-2 text-sm text-amber-700">
-                    <span className="w-8 h-px bg-gray-300" />
+                  <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                    <span className="w-8 h-px bg-gray-200" />
                     <span>{connected.length}개의 연결된 구절</span>
-                    <span className="w-8 h-px bg-gray-300" />
+                    <span className="w-8 h-px bg-gray-200" />
                   </div>
 
                   {/* 유형별 그룹 */}
@@ -710,7 +678,7 @@ export default function VerseMapPage() {
                           )}
                         </div>
 
-                        {/* 연결된 구절 카드들 */}
+                        {/* 연결된 구절 카드들 - 심플하고 모던하게 */}
                         <div className="grid gap-3">
                           {items.map(({ verse, edge }, itemIndex) => {
                             const isExpanded = expandedNodes.has(verse.reference)
@@ -722,7 +690,7 @@ export default function VerseMapPage() {
                               <div
                                 key={verse.reference}
                                 className={`bg-white rounded-xl border overflow-hidden hover:shadow-md transition-shadow ${
-                                  isFirstItem ? 'border-amber-200 shadow-sm' : 'border-amber-100'
+                                  isFirstItem ? 'border-gray-200 shadow-sm' : 'border-gray-100'
                                 }`}
                               >
                                 {/* 카드 헤더 */}
@@ -733,7 +701,7 @@ export default function VerseMapPage() {
                                   <div className="flex items-start justify-between">
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2 mb-2">
-                                        <h4 className={`font-semibold text-amber-800 ${isFirstItem ? 'text-lg' : ''}`}>
+                                        <h4 className={`font-semibold text-gray-800 ${isFirstItem ? 'text-lg' : ''}`}>
                                           {verse.reference}
                                         </h4>
                                         {subConnected.length > 0 && (
@@ -743,7 +711,7 @@ export default function VerseMapPage() {
                                         )}
                                       </div>
                                       {verse.content && (
-                                        <p className={`text-gray-700 leading-relaxed ${isFirstItem ? 'text-base' : 'text-sm'}`}>
+                                        <p className={`text-gray-600 leading-relaxed ${isFirstItem ? 'text-base' : 'text-sm'}`}>
                                           "{isFirstItem
                                             ? verse.content  // 첫 번째 항목은 전체 내용 표시
                                             : (verse.content.length > 150
@@ -758,11 +726,11 @@ export default function VerseMapPage() {
                                           e.stopPropagation()
                                           handleVerseClick(verse.reference)
                                         }}
-                                        className="px-3 py-1 bg-gradient-to-r from-amber-100 to-orange-100 text-amber-700 rounded-lg text-xs hover:from-amber-200 hover:to-orange-200 transition-colors"
+                                        className="px-3 py-1 bg-rose-50 text-rose-600 rounded-lg text-xs hover:bg-rose-100 transition-colors"
                                       >
                                         여기서 탐색
                                       </button>
-                                      <span className="text-amber-400 text-lg">
+                                      <span className="text-gray-300 text-lg">
                                         {isExpanded ? '▼' : '▶'}
                                       </span>
                                     </div>
@@ -770,7 +738,7 @@ export default function VerseMapPage() {
 
                                   {/* 관계 설명 (OpenBible 상호참조 텍스트는 숨김) */}
                                   {edge.description && !edge.description.includes('OpenBible') && !edge.description.includes('상호참조') && (
-                                    <p className="text-xs text-gray-400 mt-2 pl-2 border-l-2 border-amber-200">
+                                    <p className="text-xs text-gray-400 mt-2 pl-2 border-l-2 border-gray-200">
                                       {edge.description}
                                     </p>
                                   )}
@@ -816,8 +784,8 @@ export default function VerseMapPage() {
             })()}
 
             {/* 통계 */}
-            <div className="mt-8 pt-6 border-t border-amber-200 text-center">
-              <div className="inline-flex gap-6 text-sm text-amber-600">
+            <div className="mt-8 pt-6 border-t border-gray-100 text-center">
+              <div className="inline-flex gap-6 text-sm text-gray-400">
                 <span>총 {graph.nodes.length}개 구절</span>
                 <span>•</span>
                 <span>{graph.edges.length}개 연결</span>
