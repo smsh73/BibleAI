@@ -126,7 +126,7 @@ function parseBibleReferences(text: string): React.ReactNode[] {
       <a
         key={`${match.index}-${fullReference}`}
         href={verseMapUrl}
-        className="text-amber-700 hover:text-amber-900 underline decoration-amber-300 hover:decoration-amber-500 transition-colors font-medium"
+        className="text-pink-700 hover:text-pink-900 underline decoration-pink-300 hover:decoration-pink-500 transition-colors font-medium"
         title={`${fullReference} 구절 맵에서 보기`}
       >
         {fullReference}
@@ -751,7 +751,7 @@ export default function Home() {
 
         // 참조 텍스트
         ctx.font = `${fontSize * 0.75}px sans-serif`
-        ctx.fillStyle = '#fcd34d' // amber-200
+        ctx.fillStyle = '#fbcfe8' // pink-200
         ctx.fillText(`— ${verse.reference}`, canvas.width / 2, y + fontSize * 0.3)
       }
 
@@ -902,11 +902,55 @@ export default function Home() {
       <div className="absolute inset-0 bg-white" />
       <div className={`absolute inset-0 transition-colors duration-500 ${
         activeTab === 'bible'
-          ? 'bg-gradient-to-b from-transparent via-amber-50/10 to-orange-100/20'
+          ? 'bg-gradient-to-b from-pink-50/30 via-white to-rose-50/40'
           : activeTab === 'news'
           ? 'bg-gradient-to-br from-indigo-50 via-white to-purple-50'
           : 'bg-gradient-to-br from-green-50 via-white to-emerald-50'
       }`} />
+
+      {/* 꽃 실루엣 테두리 장식 (성경 탭에서만) */}
+      {activeTab === 'bible' && (
+        <>
+          {/* 좌측 상단 꽃 */}
+          <div className="absolute top-0 left-0 w-32 h-32 opacity-[0.07] pointer-events-none">
+            <svg viewBox="0 0 100 100" fill="currentColor" className="w-full h-full text-pink-400 -translate-x-1/4 -translate-y-1/4">
+              <path d="M50 10c-5 15-20 25-35 25 15 5 25 20 25 35 5-15 20-25 35-25-15-5-25-20-25-35z"/>
+              <circle cx="50" cy="45" r="8"/>
+            </svg>
+          </div>
+          {/* 우측 상단 꽃 */}
+          <div className="absolute top-0 right-0 w-40 h-40 opacity-[0.06] pointer-events-none">
+            <svg viewBox="0 0 100 100" fill="currentColor" className="w-full h-full text-rose-300 translate-x-1/4 -translate-y-1/4 rotate-45">
+              <ellipse cx="50" cy="20" rx="12" ry="20"/>
+              <ellipse cx="50" cy="80" rx="12" ry="20"/>
+              <ellipse cx="20" cy="50" rx="20" ry="12"/>
+              <ellipse cx="80" cy="50" rx="20" ry="12"/>
+              <circle cx="50" cy="50" r="10"/>
+            </svg>
+          </div>
+          {/* 좌측 하단 꽃 */}
+          <div className="absolute bottom-20 left-0 w-36 h-36 opacity-[0.05] pointer-events-none">
+            <svg viewBox="0 0 100 100" fill="currentColor" className="w-full h-full text-pink-300 -translate-x-1/3">
+              <ellipse cx="50" cy="20" rx="15" ry="22"/>
+              <ellipse cx="50" cy="80" rx="15" ry="22"/>
+              <ellipse cx="20" cy="50" rx="22" ry="15"/>
+              <ellipse cx="80" cy="50" rx="22" ry="15"/>
+              <ellipse cx="26" cy="26" rx="14" ry="18" transform="rotate(-45 26 26)"/>
+              <ellipse cx="74" cy="26" rx="14" ry="18" transform="rotate(45 74 26)"/>
+              <ellipse cx="26" cy="74" rx="14" ry="18" transform="rotate(45 26 74)"/>
+              <ellipse cx="74" cy="74" rx="14" ry="18" transform="rotate(-45 74 74)"/>
+              <circle cx="50" cy="50" r="12"/>
+            </svg>
+          </div>
+          {/* 우측 하단 꽃 */}
+          <div className="absolute bottom-32 right-0 w-28 h-28 opacity-[0.06] pointer-events-none">
+            <svg viewBox="0 0 100 100" fill="currentColor" className="w-full h-full text-rose-400 translate-x-1/4">
+              <path d="M50 5c-8 20-25 30-45 30 20 8 30 25 30 45 8-20 25-30 45-30-20-8-30-25-30-45z"/>
+              <circle cx="50" cy="50" r="10"/>
+            </svg>
+          </div>
+        </>
+      )}
 
       {/* 예수님 실루엣 배경 (성경 탭에서만) - 팔 벌려 환영하시는 모습 */}
       {activeTab === 'bible' && (
@@ -943,7 +987,7 @@ export default function Home() {
                   </div>
                 )}
                 <h1 className={`text-lg font-semibold transition-colors ${
-                  activeTab === 'bible' ? 'text-amber-900' : activeTab === 'news' ? 'text-indigo-900' : 'text-green-900'
+                  activeTab === 'bible' ? 'text-pink-900' : activeTab === 'news' ? 'text-indigo-900' : 'text-green-900'
                 }`}>
                   {activeTab === 'bible' ? t('bible.title') : activeTab === 'news' ? t('news.title') : t('bulletin.title')}
                 </h1>
@@ -957,7 +1001,7 @@ export default function Home() {
                 onClick={() => setActiveTab('bible')}
                 className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
                   activeTab === 'bible'
-                    ? 'bg-white text-amber-800 shadow-sm'
+                    ? 'bg-white text-pink-800 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -997,11 +1041,11 @@ export default function Home() {
                   {/* 성경 버전 선택 */}
                   {availableVersions.length > 1 && (
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="text-amber-700 font-medium">{t('bible.versionLabel')}</span>
+                      <span className="text-pink-700 font-medium">{t('bible.versionLabel')}</span>
                       <select
                         value={selectedVersion}
                         onChange={(e) => handleVersionChange(e.target.value)}
-                        className="px-2 py-0.5 bg-white/80 border border-amber-200 rounded text-amber-800 text-sm focus:outline-none focus:border-amber-400 cursor-pointer"
+                        className="px-2 py-0.5 bg-white/80 border border-pink-200 rounded text-pink-800 text-sm focus:outline-none focus:border-pink-400 cursor-pointer"
                       >
                         {availableVersions.map(v => (
                           <option key={v.id} value={v.id}>
@@ -1014,20 +1058,20 @@ export default function Home() {
 
                   {/* 감정 선택 */}
                   <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-sm">
-                    <span className="text-amber-700 font-medium mr-1">{language === 'en' ? 'Feeling:' : '마음:'}</span>
+                    <span className="text-pink-700 font-medium mr-1">{language === 'en' ? 'Feeling:' : '마음:'}</span>
                     {EMOTIONS.map((e, i) => (
                       <span key={e.value} className="inline-flex items-center">
                         <button
                           onClick={() => setEmotion(emotion === e.value ? undefined : e.value)}
                           className={`transition-colors ${
                             emotion === e.value
-                              ? 'text-amber-800 font-bold underline underline-offset-2'
-                              : 'text-amber-700 hover:text-amber-900'
+                              ? 'text-pink-800 font-bold underline underline-offset-2'
+                              : 'text-pink-700 hover:text-pink-900'
                           }`}
                         >
                           {language === 'en' ? e.labelEn : e.label}
                         </button>
-                        {i < EMOTIONS.length - 1 && <span className="text-amber-400 mx-1">·</span>}
+                        {i < EMOTIONS.length - 1 && <span className="text-pink-400 mx-1">·</span>}
                       </span>
                     ))}
                   </div>
@@ -1040,8 +1084,8 @@ export default function Home() {
               <div className="max-w-4xl mx-auto space-y-4">
                 {messages.length === 0 ? (
                   <div className="text-center pt-20 pb-8 animate-fade-in">
-                    <p className="text-amber-900 text-xl font-semibold mb-2">{t('bible.greeting')}</p>
-                    <p className="text-amber-700 text-base mb-8">{t('bible.greetingSubtitle')}</p>
+                    <p className="text-pink-900 text-xl font-semibold mb-2">{t('bible.greeting')}</p>
+                    <p className="text-pink-700 text-base mb-8">{t('bible.greetingSubtitle')}</p>
 
                     <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-base">
                       {[
@@ -1053,7 +1097,7 @@ export default function Home() {
                         <button
                           key={suggestion.key}
                           onClick={() => setInput(language === 'en' ? suggestion.en : suggestion.ko)}
-                          className="text-amber-700 hover:text-amber-900 hover:underline underline-offset-2 transition-colors font-medium"
+                          className="text-pink-700 hover:text-pink-900 hover:underline underline-offset-2 transition-colors font-medium"
                         >
                           {language === 'en' ? suggestion.en : suggestion.ko}
                         </button>
@@ -1070,8 +1114,8 @@ export default function Home() {
                       <div
                         className={`max-w-[85%] px-4 py-3 ${
                           message.role === 'user'
-                            ? 'bg-amber-600 text-white rounded-2xl rounded-br-sm'
-                            : 'bg-white/95 text-gray-800 rounded-2xl rounded-bl-sm shadow-sm border border-amber-100'
+                            ? 'bg-pink-600 text-white rounded-2xl rounded-br-sm'
+                            : 'bg-white/95 text-gray-800 rounded-2xl rounded-bl-sm shadow-sm border border-pink-100'
                         }`}
                       >
                         <div className="whitespace-pre-wrap leading-relaxed text-base">
@@ -1088,7 +1132,7 @@ export default function Home() {
                 {/* 로딩 - 기도손 애니메이션 */}
                 {loading && !messages.find(m => m.role === 'assistant' && m.content) && (
                   <div className="flex justify-start animate-fade-in">
-                    <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-amber-100">
+                    <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-pink-100">
                       <PrayingHandsLoader />
                     </div>
                   </div>
@@ -1100,15 +1144,15 @@ export default function Home() {
                     {/* 헤더 */}
                     <div className="flex items-center justify-between mb-3 px-1">
                       <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
-                        <span className="text-sm font-medium text-amber-800">참조 구절</span>
-                        <span className="text-xs text-amber-500">({verseReferences.length}개)</span>
+                        <span className="text-sm font-medium text-pink-800">참조 구절</span>
+                        <span className="text-xs text-pink-500">({verseReferences.length}개)</span>
                       </div>
                       <a
                         href={`/verse-map?reference=${encodeURIComponent(verseReferences[0]?.reference || '')}`}
-                        className="text-xs text-amber-600 hover:text-amber-800 flex items-center gap-1 transition-colors"
+                        className="text-xs text-pink-600 hover:text-pink-800 flex items-center gap-1 transition-colors"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -1123,18 +1167,18 @@ export default function Home() {
                         <a
                           key={idx}
                           href={`/verse-map?reference=${encodeURIComponent(verse.reference)}`}
-                          className="block bg-white/90 rounded-xl p-3 hover:bg-amber-50 hover:shadow-md transition-all cursor-pointer group border border-amber-100"
+                          className="block bg-white/90 rounded-xl p-3 hover:bg-pink-50 hover:shadow-md transition-all cursor-pointer group border border-pink-100"
                         >
                           <div className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-6 h-6 bg-amber-100 rounded-full flex items-center justify-center text-xs font-bold text-amber-700">
+                            <span className="flex-shrink-0 w-6 h-6 bg-pink-100 rounded-full flex items-center justify-center text-xs font-bold text-pink-700">
                               {idx + 1}
                             </span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="font-semibold text-amber-900 text-sm group-hover:text-amber-700 transition-colors">
+                                <span className="font-semibold text-pink-900 text-sm group-hover:text-pink-700 transition-colors">
                                   {verse.reference}
                                 </span>
-                                <svg className="w-3.5 h-3.5 text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3.5 h-3.5 text-pink-400 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
                               </div>
@@ -1231,20 +1275,20 @@ export default function Home() {
                   <div className="animate-fade-in mt-6 space-y-4">
                     {/* 위로 이미지 */}
                     {(comfortImage || mediaLoading.image) && (
-                      <div className="bg-white/95 rounded-xl p-4 border border-amber-100 shadow-sm">
+                      <div className="bg-white/95 rounded-xl p-4 border border-pink-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-3">
-                          <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <span className="text-sm font-medium text-amber-800">
+                          <span className="text-sm font-medium text-pink-800">
                             {language === 'en' ? 'Expressing Heart' : '마음 표현'}
                           </span>
                         </div>
                         {mediaLoading.image ? (
-                          <div className="flex items-center justify-center h-48 bg-amber-50 rounded-lg">
+                          <div className="flex items-center justify-center h-48 bg-pink-50 rounded-lg">
                             <div className="text-center">
-                              <div className="animate-spin w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full mx-auto mb-2" />
-                              <p className="text-sm text-amber-600">
+                              <div className="animate-spin w-8 h-8 border-4 border-pink-500 border-t-transparent rounded-full mx-auto mb-2" />
+                              <p className="text-sm text-pink-600">
                                 {language === 'en' ? 'Generating image...' : '이미지를 생성하고 있습니다...'}
                               </p>
                             </div>
@@ -1264,7 +1308,7 @@ export default function Home() {
                                     ? verseReferences[0].content.substring(0, 80) + '...'
                                     : verseReferences[0].content}"
                                 </p>
-                                <p className="text-amber-200 text-center text-xs mt-1 font-medium drop-shadow">
+                                <p className="text-pink-200 text-center text-xs mt-1 font-medium drop-shadow">
                                   — {verseReferences[0].reference}
                                 </p>
                               </div>
@@ -1275,7 +1319,7 @@ export default function Home() {
                               className="absolute top-2 right-2 p-2 bg-white/90 hover:bg-white rounded-full shadow-md transition-all hover:scale-105"
                               title={language === 'en' ? 'Download image' : '이미지 다운로드'}
                             >
-                              <svg className="w-5 h-5 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-5 h-5 text-pink-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                               </svg>
                             </button>
@@ -1286,20 +1330,20 @@ export default function Home() {
 
                     {/* 팟캐스트 오디오 */}
                     {(podcastAudio || mediaLoading.audio) && (
-                      <div className="bg-white/95 rounded-xl p-4 border border-amber-100 shadow-sm">
+                      <div className="bg-white/95 rounded-xl p-4 border border-pink-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-3">
-                          <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                           </svg>
-                          <span className="text-sm font-medium text-amber-800">
+                          <span className="text-sm font-medium text-pink-800">
                             {language === 'en' ? 'Pastor\'s Message' : '목사님 음성 메시지'}
                           </span>
                         </div>
                         {mediaLoading.audio ? (
-                          <div className="flex items-center justify-center h-16 bg-amber-50 rounded-lg">
+                          <div className="flex items-center justify-center h-16 bg-pink-50 rounded-lg">
                             <div className="flex items-center gap-2">
-                              <div className="animate-spin w-6 h-6 border-3 border-amber-500 border-t-transparent rounded-full" />
-                              <p className="text-sm text-amber-600">
+                              <div className="animate-spin w-6 h-6 border-3 border-pink-500 border-t-transparent rounded-full" />
+                              <p className="text-sm text-pink-600">
                                 {language === 'en' ? 'Generating audio...' : '오디오를 생성하고 있습니다...'}
                               </p>
                             </div>
@@ -1339,7 +1383,7 @@ export default function Home() {
                       }
                     }}
                     placeholder={t('bible.inputPlaceholder')}
-                    className="flex-1 px-4 py-3 bg-white border border-amber-300 rounded-2xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 text-gray-900 placeholder-amber-500 text-base resize-none min-h-[48px] max-h-[120px]"
+                    className="flex-1 px-4 py-3 bg-white border border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-200 text-gray-900 placeholder-pink-400 text-base resize-none min-h-[48px] max-h-[120px]"
                     disabled={loading}
                     rows={1}
                     style={{ height: 'auto', overflow: 'hidden' }}
@@ -1353,7 +1397,7 @@ export default function Home() {
                   <button
                     type="submit"
                     disabled={loading || !input.trim()}
-                    className="w-10 h-10 flex items-center justify-center bg-amber-600 hover:bg-amber-700 text-white rounded-full disabled:bg-amber-300 disabled:cursor-not-allowed transition-colors"
+                    className="w-10 h-10 flex items-center justify-center bg-pink-600 hover:bg-pink-700 text-white rounded-full disabled:bg-pink-300 disabled:cursor-not-allowed transition-colors"
                   >
                     {loading ? (
                       <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
@@ -1487,10 +1531,10 @@ export default function Home() {
                     {/* 로딩 표시 - 기도손 애니메이션 */}
                     {newsLoading && !newsMessages.find(m => m.role === 'assistant' && m.content) && (
                       <div className="flex justify-start animate-fade-in">
-                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-amber-100">
+                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-pink-100">
                           <div className="flex items-center gap-3">
-                            <PrayingHandsIcon className="w-6 h-6 text-amber-600" />
-                            <WaveText text="기사를 찾고 있습니다..." className="text-sm text-amber-600 font-medium" />
+                            <PrayingHandsIcon className="w-6 h-6 text-pink-600" />
+                            <WaveText text="기사를 찾고 있습니다..." className="text-sm text-pink-600 font-medium" />
                           </div>
                         </div>
                       </div>
