@@ -429,8 +429,8 @@ export default function VerseMapPage() {
                   {testament === 'old' ? (language === 'en' ? 'Old Testament' : '구약') : (language === 'en' ? 'New Testament' : '신약')}
                 </h3>
 
-                {/* 책 그리드 - 심플한 디자인 */}
-                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13 gap-1">
+                {/* 책 그리드 - 두꺼운 테두리 스타일 */}
+                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13 gap-1.5">
                   {BIBLE_BOOKS.filter(b => b.testament === testament).map((book) => {
                     const isSelected = selectedBook?.name === book.name
 
@@ -439,10 +439,10 @@ export default function VerseMapPage() {
                         key={book.name}
                         onClick={() => handleBookClick(book)}
                         className={`
-                          px-1.5 py-2 rounded-lg text-xs font-medium transition-all
+                          px-1.5 py-1.5 rounded-lg text-xs font-medium transition-all
                           ${isSelected
-                            ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-300 shadow-sm'
-                            : 'bg-white border border-gray-200 text-gray-600 hover:border-rose-200 hover:text-rose-600'
+                            ? 'bg-rose-50 text-rose-700 border-2 border-rose-400 shadow-sm'
+                            : 'bg-white border-2 border-gray-800 text-gray-700 hover:border-rose-400 hover:bg-rose-50'
                           }
                         `}
                         title={book.name}
@@ -453,9 +453,9 @@ export default function VerseMapPage() {
                   })}
                 </div>
 
-                {/* 선택된 책의 장/절 표시 - 모던하고 심플하게 */}
+                {/* 선택된 책의 장/절 표시 - 두꺼운 테두리 스타일 */}
                 {selectedBook && selectedBook.testament === testament && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm animate-fade-in w-full">
+                  <div className="bg-white rounded-xl border-2 border-gray-800 p-4 shadow-sm animate-fade-in w-full">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-semibold text-gray-800">
                         {selectedBook.name}
@@ -471,8 +471,8 @@ export default function VerseMapPage() {
                       </button>
                     </div>
 
-                    {/* 장 그리드 - 심플한 디자인 */}
-                    <div className="grid grid-cols-10 gap-1 mb-3">
+                    {/* 장 그리드 - 두꺼운 테두리 스타일 */}
+                    <div className="grid grid-cols-10 gap-1.5 mb-3">
                       {selectedBook.chapters.map((verseCount, idx) => {
                         const chapter = idx + 1
                         const isChapterSelected = selectedChapter === chapter
@@ -482,10 +482,10 @@ export default function VerseMapPage() {
                             key={chapter}
                             onClick={() => handleChapterClick(chapter)}
                             className={`
-                              w-full aspect-square rounded-md text-xs font-medium transition-all
+                              w-full py-1.5 rounded-lg text-xs font-medium transition-all
                               ${isChapterSelected
-                                ? 'bg-rose-100 text-rose-700 ring-2 ring-rose-300'
-                                : 'bg-gray-50 text-gray-600 hover:bg-rose-50 hover:text-rose-600'
+                                ? 'bg-rose-50 text-rose-700 border-2 border-rose-400 shadow-sm'
+                                : 'bg-white text-gray-700 border-2 border-gray-800 hover:border-rose-400 hover:bg-rose-50'
                               }
                             `}
                           >
@@ -495,18 +495,18 @@ export default function VerseMapPage() {
                       })}
                     </div>
 
-                    {/* 절 그리드 - 심플한 디자인 */}
+                    {/* 절 그리드 - 두꺼운 테두리 스타일 */}
                     {selectedChapter && (
                       <div className="border-t border-gray-100 pt-3 animate-fade-in">
                         <p className="text-xs text-gray-500 mb-2">
                           {selectedBook.name} {selectedChapter}{language === 'en' ? ':' : '장'} - {language === 'en' ? 'Select verse' : '절 선택'}
                         </p>
-                        <div className="grid grid-cols-10 gap-1 max-h-48 overflow-y-auto">
+                        <div className="grid grid-cols-10 gap-1.5 max-h-48 overflow-y-auto">
                           {Array.from({ length: selectedBook.chapters[selectedChapter - 1] }, (_, i) => i + 1).map((verse) => (
                             <button
                               key={verse}
                               onClick={() => handleVerseSelect(selectedBook, selectedChapter, verse)}
-                              className="w-full aspect-square rounded text-xs font-medium transition-all bg-white border border-gray-200 text-gray-600 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200"
+                              className="w-full py-1.5 rounded-lg text-xs font-medium transition-all bg-white border-2 border-gray-800 text-gray-700 hover:border-rose-400 hover:bg-rose-50"
                             >
                               {verse}
                             </button>
