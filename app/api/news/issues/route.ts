@@ -13,8 +13,11 @@ const supabase = createClient(
 
 export async function GET(req: NextRequest) {
   try {
-    // 처리 완료된 호수 목록 조회 (기사 수 포함)
-    const { data: issues, error } = await supabase
+    const { searchParams } = new URL(req.url)
+    const status = searchParams.get('status') // 'completed', 'pending', 또는 null(전체)
+
+    // 호수 목록 조회 (기사 수 포함)
+    let query = supabase
       .from('news_issues')
       .select(`
         id,
@@ -27,8 +30,14 @@ export async function GET(req: NextRequest) {
         created_at,
         updated_at
       `)
-      .eq('status', 'completed')
       .order('issue_number', { ascending: false })
+
+    // status 파라미터가 있으면 필터링
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    const { data: issues, error } = await query
 
     if (error) {
       console.error('호수 목록 조회 오류:', error)

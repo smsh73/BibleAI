@@ -117,6 +117,33 @@ export default function BulletinPage() {
     }
   }, [activeTab])
 
+  // 크롤링 탭 진입 시 대기 중인 주보 자동 로드 (스캔 없이 바로 처리 가능)
+  useEffect(() => {
+    if (activeTab === 'crawl' && scannedBulletins.length === 0) {
+      loadAllBulletins()
+    }
+  }, [activeTab])
+
+  async function loadAllBulletins() {
+    try {
+      const res = await fetch('/api/bulletin/issues')
+      const data = await res.json()
+      if (data.success && data.issues && data.issues.length > 0) {
+        // scannedBulletins 형식으로 변환
+        const bulletins = data.issues.map((issue: any) => ({
+          bulletinDate: issue.bulletin_date,
+          title: issue.title,
+          boardId: issue.board_id,
+          pageCount: issue.page_count,
+          status: issue.status
+        }))
+        setScannedBulletins(bulletins)
+      }
+    } catch (error) {
+      console.error('주보 목록 로드 실패:', error)
+    }
+  }
+
   async function loadCompletedBulletins() {
     setIssuesLoading(true)
     try {
@@ -341,14 +368,7 @@ export default function BulletinPage() {
       <header className="relative z-10 flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h1 className="text-lg font-semibold text-amber-900">주보 시스템</h1>
-            </div>
+            <h1 className="text-lg font-semibold text-amber-900">주보 시스템</h1>
             <ResponsiveNav />
           </div>
 
@@ -660,12 +680,12 @@ export default function BulletinPage() {
               )}
             </div>
 
-            {/* 스캔 결과 */}
+            {/* 주보 목록 (DB에서 자동 로드 또는 스캔 결과) */}
             {scannedBulletins.length > 0 && (
               <div className="bg-white/95 rounded-xl border border-amber-100 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-green-900">
-                    스캔 결과: 총 {scannedBulletins.length}건
+                    주보 목록: 총 {scannedBulletins.length}건
                   </h2>
                 </div>
 

@@ -130,10 +130,40 @@ export default function NewsPage() {
     }
   }, [activeTab])
 
+  // 크롤링 탭 진입 시 대기 중인 호수 자동 로드 (스캔 없이 바로 처리 가능)
+  useEffect(() => {
+    if (activeTab === 'crawl' && scannedIssues.length === 0) {
+      loadAllIssues()
+    }
+  }, [activeTab])
+
+  async function loadAllIssues() {
+    try {
+      const res = await fetch('/api/news/issues')
+      const data = await res.json()
+      if (data.success && data.issues && data.issues.length > 0) {
+        // scannedIssues 형식으로 변환
+        const issues = data.issues.map((issue: any) => ({
+          issueNumber: issue.issue_number,
+          issueDate: issue.issue_date,
+          year: issue.year,
+          month: issue.month,
+          pageCount: issue.page_count,
+          status: issue.status,
+          articleCount: issue.articleCount,
+          chunkCount: issue.chunkCount
+        }))
+        setScannedIssues(issues)
+      }
+    } catch (error) {
+      console.error('호수 목록 로드 실패:', error)
+    }
+  }
+
   async function loadCompletedIssues() {
     setIssuesLoading(true)
     try {
-      const res = await fetch('/api/news/issues')
+      const res = await fetch('/api/news/issues?status=completed')
       const data = await res.json()
       if (data.success) {
         setCompletedIssues(data.issues)
@@ -485,14 +515,7 @@ export default function NewsPage() {
       <header className="relative z-10 flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
-                </svg>
-              </div>
-              <h1 className="text-lg font-semibold text-amber-900">열한시 뉴스</h1>
-            </div>
+            <h1 className="text-lg font-semibold text-amber-900">열한시 뉴스</h1>
             <ResponsiveNav />
           </div>
 
@@ -898,14 +921,14 @@ export default function NewsPage() {
               )}
             </div>
 
-            {/* 스캔 결과 */}
+            {/* 호수 목록 (DB에서 자동 로드 또는 스캔 결과) */}
             {scannedIssues.length > 0 && (
               <div className="bg-white/95 rounded-xl border border-amber-100 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-indigo-900">
-                    스캔 결과: 총 {scannedIssues.length}건
+                    호수 목록: 총 {scannedIssues.length}건
                     <span className="ml-2 text-sm font-normal text-gray-600">
-                      (기처리: {scannedIssues.filter(i => i.status === 'completed').length}건 / 미처리: {scannedIssues.filter(i => i.status !== 'completed').length}건)
+                      (완료: {scannedIssues.filter(i => i.status === 'completed').length}건 / 대기: {scannedIssues.filter(i => i.status !== 'completed').length}건)
                     </span>
                   </h2>
                 </div>
