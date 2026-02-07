@@ -16,7 +16,7 @@ import * as dotenv from 'dotenv'
 // 환경 변수 로드
 dotenv.config({ path: '.env.local' })
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY!
 
 if (!supabaseUrl || !supabaseServiceKey) {

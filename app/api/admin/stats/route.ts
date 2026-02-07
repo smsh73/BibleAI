@@ -4,64 +4,70 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 export async function GET() {
   try {
     // 뉴스 통계
-    const { count: newsIssues } = await supabase
+    const { count: newsIssues } = await getSupabase()
       .from('news_issues')
       .select('*', { count: 'exact', head: true })
 
-    const { count: newsChunks } = await supabase
+    const { count: newsChunks } = await getSupabase()
       .from('news_chunks')
       .select('*', { count: 'exact', head: true })
 
-    const { count: newsEmbedded } = await supabase
+    const { count: newsEmbedded } = await getSupabase()
       .from('news_chunks')
       .select('*', { count: 'exact', head: true })
       .not('embedding', 'is', null)
 
     // 성경 통계
-    const { count: bibleVerses } = await supabase
+    const { count: bibleVerses } = await getSupabase()
       .from('bible_verses')
       .select('*', { count: 'exact', head: true })
 
-    const { count: bibleEmbedded } = await supabase
+    const { count: bibleEmbedded } = await getSupabase()
       .from('bible_verses')
       .select('*', { count: 'exact', head: true })
       .not('embedding', 'is', null)
 
     // 설교 통계
-    const { count: sermons } = await supabase
+    const { count: sermons } = await getSupabase()
       .from('sermons')
       .select('*', { count: 'exact', head: true })
 
-    const { count: sermonChunks } = await supabase
+    const { count: sermonChunks } = await getSupabase()
       .from('sermon_chunks')
       .select('*', { count: 'exact', head: true })
 
     // 주보 통계
-    const { count: bulletinIssues } = await supabase
+    const { count: bulletinIssues } = await getSupabase()
       .from('bulletin_issues')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'completed')
 
-    const { count: bulletinChunks } = await supabase
+    const { count: bulletinChunks } = await getSupabase()
       .from('bulletin_chunks')
       .select('*', { count: 'exact', head: true })
 
     // 성경 구절 관계 통계
-    const { count: verseRelations } = await supabase
+    const { count: verseRelations } = await getSupabase()
       .from('verse_relations')
       .select('*', { count: 'exact', head: true })
 
-    const { count: verseThemes } = await supabase
+    const { count: verseThemes } = await getSupabase()
       .from('verse_themes')
       .select('*', { count: 'exact', head: true })
 
@@ -79,7 +85,7 @@ export async function GET() {
     const relationTypeCount: Record<string, number> = {}
 
     await Promise.all(relationTypesList.map(async (relationType) => {
-      const { count } = await supabase
+      const { count } = await getSupabase()
         .from('verse_relations')
         .select('*', { count: 'exact', head: true })
         .eq('relation_type', relationType)

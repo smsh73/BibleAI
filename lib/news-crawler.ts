@@ -9,21 +9,46 @@
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { splitArticles } from './news-extractor'
 
-// API 클라이언트
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '')
+// API 클라이언트 (lazy initialization - runtime에서만 생성)
+let _openai: OpenAI | null = null
+let _anthropic: Anthropic | null = null
+let _genAI: GoogleGenerativeAI | null = null
+let _supabase: SupabaseClient | null = null
 
-// Supabase 클라이언트
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  }
+  return _openai
+}
+
+function getAnthropic(): Anthropic {
+  if (!_anthropic) {
+    _anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  }
+  return _anthropic
+}
+
+function getGenAI(): GoogleGenerativeAI {
+  if (!_genAI) {
+    _genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '')
+  }
+  return _genAI
+}
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // 상수
 const BASE_URL = 'https://www.anyangjeil.org'
@@ -247,7 +272,7 @@ export async function downloadImage(imageUrl: string, localPath: string): Promis
 // ============ OCR 함수 ============
 
 async function extractWithOpenAI(base64Image: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: 'gpt-4o',
     messages: [
       {
@@ -267,7 +292,7 @@ async function extractWithOpenAI(base64Image: string): Promise<string> {
 }
 
 async function extractWithGemini(base64Image: string): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+  const model = getGenAI().getGenerativeModel({ model: 'gemini-1.5-pro' })
   const result = await model.generateContent([
     { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
     { text: OCR_PROMPT }
@@ -276,7 +301,7 @@ async function extractWithGemini(base64Image: string): Promise<string> {
 }
 
 async function extractWithClaude(base64Image: string): Promise<string> {
-  const response = await anthropic.messages.create({
+  const response = await getAnthropic().messages.create({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 4096,
     messages: [
@@ -334,7 +359,7 @@ export async function performOCR(imagePath: string): Promise<{ text: string; pro
  */
 export async function extractMetadata(articleText: string): Promise<Partial<NewsArticle>> {
   try {
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       messages: [
@@ -410,7 +435,7 @@ export function chunkText(text: string, chunkSize: number = 500, overlap: number
  * bible_verses, sermon_chunks와 동일한 차원 사용
  */
 export async function createEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: 'text-embedding-3-small',
     input: text,
     dimensions: 1536
@@ -421,7 +446,7 @@ export async function createEmbedding(text: string): Promise<number[]> {
 // ============ DB 저장 ============
 
 export async function saveIssue(issue: NewsIssue): Promise<number> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('news_issues')
     .upsert(issue, { onConflict: 'issue_number' })
     .select('id')
@@ -432,7 +457,7 @@ export async function saveIssue(issue: NewsIssue): Promise<number> {
 }
 
 export async function savePage(page: NewsPage): Promise<number> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('news_pages')
     .upsert(page, { onConflict: 'issue_id,page_number' })
     .select('id')
@@ -443,7 +468,7 @@ export async function savePage(page: NewsPage): Promise<number> {
 }
 
 export async function saveArticle(article: NewsArticle): Promise<number> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('news_articles')
     .insert(article)
     .select('id')
@@ -454,7 +479,7 @@ export async function saveArticle(article: NewsArticle): Promise<number> {
 }
 
 export async function saveChunk(chunk: NewsChunk): Promise<void> {
-  const { error } = await supabase.from('news_chunks').insert(chunk)
+  const { error } = await getSupabase().from('news_chunks').insert(chunk)
   if (error) throw error
 }
 
@@ -474,7 +499,7 @@ export async function searchNews(
   const queryEmbedding = await createEmbedding(query)
 
   // 하이브리드 검색 실행
-  const { data, error } = await supabase.rpc('hybrid_search_news', {
+  const { data, error } = await getSupabase().rpc('hybrid_search_news', {
     query_embedding: queryEmbedding,
     query_text: query,
     match_threshold: 0.5,
@@ -530,7 +555,7 @@ export async function processIssue(
     console.log(`OCR 완료 (${provider}): ${ocrText.length}자`)
 
     // 페이지 업데이트
-    await supabase
+    await getSupabase()
       .from('news_pages')
       .update({ ocr_text: ocrText, ocr_provider: provider, status: 'completed' })
       .eq('id', pageId)
@@ -584,7 +609,7 @@ export async function processIssue(
   }
 
   // 4. 이슈 상태 업데이트
-  await supabase
+  await getSupabase()
     .from('news_issues')
     .update({ status: 'completed', updated_at: new Date().toISOString() })
     .eq('id', issueId)

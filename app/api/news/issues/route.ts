@@ -4,12 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -17,7 +23,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get('status') // 'completed', 'pending', 또는 null(전체)
 
     // 호수 목록 조회 (기사 수 포함)
-    let query = supabase
+    let query = getSupabase()
       .from('news_issues')
       .select(`
         id,
@@ -48,13 +54,13 @@ export async function GET(req: NextRequest) {
     const issuesWithStats = await Promise.all(
       (issues || []).map(async (issue) => {
         // 기사 수
-        const { count: articleCount } = await supabase
+        const { count: articleCount } = await getSupabase()
           .from('news_articles')
           .select('*', { count: 'exact', head: true })
           .eq('issue_id', issue.id)
 
         // 청크 수
-        const { count: chunkCount } = await supabase
+        const { count: chunkCount } = await getSupabase()
           .from('news_chunks')
           .select('*', { count: 'exact', head: true })
           .eq('issue_id', issue.id)
@@ -68,11 +74,11 @@ export async function GET(req: NextRequest) {
     )
 
     // 전체 통계
-    const { count: totalArticles } = await supabase
+    const { count: totalArticles } = await getSupabase()
       .from('news_articles')
       .select('*', { count: 'exact', head: true })
 
-    const { count: totalChunks } = await supabase
+    const { count: totalChunks } = await getSupabase()
       .from('news_chunks')
       .select('*', { count: 'exact', head: true })
 

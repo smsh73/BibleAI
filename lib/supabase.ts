@@ -5,39 +5,38 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-// 환경 변수
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
-
-// 클라이언트 인스턴스
+// 클라이언트 인스턴스 (lazy initialization - runtime에서만 생성)
 let _supabase: SupabaseClient | null = null
 let _supabaseAdmin: SupabaseClient | null = null
 
 // 공개 클라이언트 (브라우저용)
 export function getSupabase(): SupabaseClient | null {
-  if (!supabaseUrl || !supabaseAnonKey) return null
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  if (!url || !anonKey) return null
   if (!_supabase) {
-    _supabase = createClient(supabaseUrl, supabaseAnonKey)
+    _supabase = createClient(url, anonKey)
   }
   return _supabase
 }
 
 // 관리자 클라이언트 (서버용)
 export function getSupabaseAdmin(): SupabaseClient | null {
-  if (!supabaseUrl || !supabaseServiceKey) return null
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+  if (!url || !serviceKey) return null
   if (!_supabaseAdmin) {
-    _supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    _supabaseAdmin = createClient(url, serviceKey, {
       auth: { autoRefreshToken: false, persistSession: false }
     })
   }
   return _supabaseAdmin
 }
 
-// 레거시 호환성
-export const supabase = supabaseUrl && supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : null as any
+// 레거시 호환성 (lazy - 실제 호출 시점에 생성)
+export function getSupabaseLegacy(): SupabaseClient | null {
+  return getSupabaseAdmin()
+}
 
 // ============================================
 // 타입 정의

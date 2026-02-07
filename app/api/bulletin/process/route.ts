@@ -8,17 +8,30 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import { analyzeBulletinPage } from '@/lib/bulletin-ocr'
 import { validateOCRResult } from '@/lib/ocr-validator'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+// Lazy initialization - runtime에서만 생성
+let _supabase: SupabaseClient | null = null
+let _openai: OpenAI | null = null
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
+
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  }
+  return _openai
+}
 
 // 개선된 OCR 사용 여부 (환경변수로 제어, 기본값: true)
 const USE_ADVANCED_OCR = process.env.USE_ADVANCED_BULLETIN_OCR !== 'false'
@@ -66,7 +79,7 @@ async function updateTaskProgress(currentItem: string, processedCount: number, t
  */
 async function getLatestCachedBulletinDate(): Promise<string | null> {
   try {
-    const { data } = await supabase
+    const { data } = await getSupabase()
       .from('bulletin_issues')
       .select('bulletin_date')
       .order('bulletin_date', { ascending: false })
@@ -179,7 +192,7 @@ async function performBasicOCR(imageUrl: string): Promise<string> {
     const base64Image = await downloadImageAsBase64(imageUrl)
     if (!base64Image) return ''
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
@@ -421,7 +434,7 @@ function splitIntoChunks(text: string, issueId: number, pageNumber: number, bull
 
 // 임베딩 생성
 async function createEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
+  const response = await getOpenAI().embeddings.create({
     model: 'text-embedding-3-small',
     input: text.substring(0, 8000),
     dimensions: 1536
@@ -432,11 +445,11 @@ async function createEmbedding(text: string): Promise<number[]> {
 // GET: 처리 현황 조회
 export async function GET() {
   try {
-    const { data: issues } = await supabase
+    const { data: issues } = await getSupabase()
       .from('bulletin_issues')
       .select('id, status')
 
-    const { data: chunks } = await supabase
+    const { data: chunks } = await getSupabase()
       .from('bulletin_chunks')
       .select('id, embedding')
 
@@ -502,7 +515,7 @@ async function syncVectorIndex(): Promise<void> {
   try {
     // bulletin_chunks 테이블의 벡터 인덱스 갱신
     // ANALYZE로 통계 정보 업데이트 (검색 최적화)
-    const { error } = await supabase.rpc('refresh_bulletin_vector_index')
+    const { error } = await getSupabase().rpc('refresh_bulletin_vector_index')
     if (error) {
       // RPC가 없으면 직접 ANALYZE 실행 시도
       console.log('[bulletin/process] refresh_bulletin_vector_index RPC 없음, 기본 동기화 사용')
@@ -524,11 +537,11 @@ export async function POST(req: NextRequest) {
       // 전체 리스캔인 경우 미처리 스캔 정보 삭제
       if (fullRescan) {
         console.log('[bulletin/process] 전체 재스캔 - 미처리 스캔 정보 삭제 중...')
-        await supabase.from('bulletin_issues').delete().in('status', ['pending', 'failed'])
+        await getSupabase().from('bulletin_issues').delete().in('status', ['pending', 'failed'])
       }
 
       // DB에 캐시된 주보 확인
-      const { data: cachedIssues } = await supabase
+      const { data: cachedIssues } = await getSupabase()
         .from('bulletin_issues')
         .select('bulletin_date')
         .order('bulletin_date', { ascending: false })
@@ -571,7 +584,7 @@ export async function POST(req: NextRequest) {
       // DB에 저장
       let newCount = 0
       for (const bulletin of uniqueBulletins) {
-        const { error } = await supabase
+        const { error } = await getSupabase()
           .from('bulletin_issues')
           .insert({
             bulletin_date: bulletin.bulletinDate,
@@ -587,7 +600,7 @@ export async function POST(req: NextRequest) {
       }
 
       // 현재 상태 조회
-      const { data: allIssues } = await supabase
+      const { data: allIssues } = await getSupabase()
         .from('bulletin_issues')
         .select('*')
         .order('bulletin_date', { ascending: false })
@@ -615,7 +628,7 @@ export async function POST(req: NextRequest) {
     if (action === 'process') {
       // 미처리 주보 조회 (락 획득 전 체크)
       // maxIssues가 지정되지 않으면 모든 미처리 주보를 처리
-      let query = supabase
+      let query = getSupabase()
         .from('bulletin_issues')
         .select('*')
         .eq('status', 'pending')
@@ -720,7 +733,7 @@ export async function POST(req: NextRequest) {
               for (const chunk of chunks) {
                 try {
                   const embedding = await createEmbedding(chunk.content)
-                  await supabase.from('bulletin_chunks').insert({
+                  await getSupabase().from('bulletin_chunks').insert({
                     ...chunk,
                     embedding
                   })
@@ -735,7 +748,7 @@ export async function POST(req: NextRequest) {
             }
 
             // 상태 업데이트
-            await supabase
+            await getSupabase()
               .from('bulletin_issues')
               .update({ status: 'completed', page_count: imageUrls.length })
               .eq('id', bulletin.id)

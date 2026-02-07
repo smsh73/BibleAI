@@ -6,13 +6,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -34,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 임베딩이 없는 구절 조회
-    const { data: pendingVerses, error: fetchError } = await supabase
+    const { data: pendingVerses, error: fetchError } = await getSupabase()
       .from('bible_verses')
       .select('id, content')
       .eq('version_id', version)
@@ -76,7 +82,7 @@ export async function POST(request: NextRequest) {
         for (let j = 0; j < batch.length; j++) {
           const embedding = response.data[j].embedding
 
-          const { error: updateError } = await supabase
+          const { error: updateError } = await getSupabase()
             .from('bible_verses')
             .update({ embedding })
             .eq('id', batch[j].id)

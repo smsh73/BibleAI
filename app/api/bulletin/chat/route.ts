@@ -7,15 +7,21 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // API 키 캐시
 let apiKeyCache: Record<string, string> = {}
@@ -29,7 +35,7 @@ async function fetchStoredApiKeys(): Promise<Record<string, string>> {
   }
 
   try {
-    const { data } = await supabase
+    const { data } = await getSupabase()
       .from('api_keys')
       .select('provider, key')
       .eq('is_active', true)
@@ -108,7 +114,7 @@ async function hybridSearch(
 
   const queryEmbedding = await createEmbedding(query)
 
-  const { data: vectorResults, error } = await supabase.rpc('hybrid_search_bulletin', {
+  const { data: vectorResults, error } = await getSupabase().rpc('hybrid_search_bulletin', {
     query_embedding: queryEmbedding,
     query_text: query,
     match_threshold: threshold,
@@ -125,8 +131,22 @@ async function hybridSearch(
   return vectorResults || []
 }
 
-// 시스템 프롬프트
-const SYSTEM_PROMPT = `당신은 안양제일교회의 주보를 분석하고 답변하는 AI 어시스턴트입니다.
+// 시스템 프롬프트 (동적 날짜 포함)
+function getBulletinSystemPrompt(): string {
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`
+  const dayOfWeek = now.getDay()
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+  const thisSunday = new Date(now)
+  thisSunday.setDate(now.getDate() + daysUntilSunday)
+  const thisSundayStr = `${thisSunday.getFullYear()}년 ${thisSunday.getMonth() + 1}월 ${thisSunday.getDate()}일`
+
+  return `당신은 안양제일교회의 주보를 분석하고 답변하는 AI 어시스턴트입니다.
+
+현재 시점 정보:
+- 오늘 날짜: ${todayStr}
+- 이번 주일(일요일): ${thisSundayStr}
+- "이번주" = 이번 주일(일요일) 기준, "주일" = 일요일
 
 역할:
 1. 주보 탐색: 예배순서, 교회소식, 기도제목, 행사 안내 등을 찾아 안내합니다.
@@ -138,14 +158,18 @@ const SYSTEM_PROMPT = `당신은 안양제일교회의 주보를 분석하고 �
 - 출처(날짜)를 명시합니다.
 - 주보에 없는 내용은 추측하지 않습니다.
 - 친절하고 이해하기 쉽게 설명합니다.
+- "이번주 주보"라고 하면 이번 주일(${thisSundayStr}) 또는 가장 최근 주일의 주보를 의미합니다.
+- 날짜를 언급할 때 오늘(${todayStr}) 기준으로 "지난주", "이번주", "다음주" 등을 정확히 사용하세요.
 
 응답 형식:
 - 요약은 핵심 내용 위주로 간결하게
 - 관련 내용이 여러 개면 목록으로 정리
 - 날짜, 시간, 장소는 정확히 표기`
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const SYSTEM_PROMPT = getBulletinSystemPrompt()
     const { messages, filters } = await req.json()
 
     if (!messages || messages.length === 0) {

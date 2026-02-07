@@ -9,12 +9,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 export async function GET(
   req: NextRequest,
@@ -28,7 +34,7 @@ export async function GET(
     }
 
     // 1. 설교 메타데이터 조회
-    const { data: sermon, error: sermonError } = await supabase
+    const { data: sermon, error: sermonError } = await getSupabase()
       .from('sermons')
       .select('*')
       .eq('video_id', videoId)
@@ -40,7 +46,7 @@ export async function GET(
     }
 
     // 2. 청크 조회 (chunk_index 순서대로)
-    const { data: chunks, error: chunksError } = await supabase
+    const { data: chunks, error: chunksError } = await getSupabase()
       .from('sermon_chunks')
       .select('chunk_index, content, start_time, end_time')
       .eq('video_id', videoId)

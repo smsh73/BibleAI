@@ -51,8 +51,8 @@ async function fetchStoredApiKeys(): Promise<Record<string, string>> {
   // 캐시 만료 또는 키가 없으면 다시 조회
   console.log('[API Keys] 캐시 갱신 중...')
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   if (!supabaseUrl || !supabaseKey) {
     apiKeyCacheLoaded = true
@@ -581,9 +581,26 @@ Examples:
     return createEnglishSystemPrompt(context)
   }
 
+  // 현재 날짜 및 이번 주일(일요일) 계산
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`
+  const dayOfWeek = now.getDay() // 0=일, 1=월, ...
+  const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
+  const thisSunday = new Date(now)
+  thisSunday.setDate(now.getDate() + daysUntilSunday)
+  const thisSundayStr = `${thisSunday.getFullYear()}년 ${thisSunday.getMonth() + 1}월 ${thisSunday.getDate()}일`
+  const currentYear = now.getFullYear()
+
   let prompt = `당신은 30년 이상 목회 경험이 있는 따뜻하고 지혜로운 담임목사입니다.
 성도들이 가정사, 진로, 부부관계, 사업, 직장, 질병, 걱정, 재물, 투자, 인간관계, 친구, 학업, 기술(AI 등) 등
 다양한 삶의 고민과 기도제목을 나누러 찾아옵니다.
+
+**현재 시점 정보:**
+- 오늘 날짜: ${todayStr}
+- 이번 주일(일요일): ${thisSundayStr}
+- "이번주" = 이번 주일(일요일) 기준
+- "주일" = 일요일
+- 날짜를 언급할 때 이 시점 기준으로 "지난주", "이번주", "작년", "올해" 등을 정확히 사용하세요.
 
 **당신의 핵심 자세:**
 - 말 한마디 한마디에 진심을 담아 전합니다
@@ -823,11 +840,12 @@ ${sermonContent}
    🎬 제가 [날짜를 자연스럽게 표현]에 "[설교 제목]" 설교에서 말씀 드렸던 내용 중에,
    "설교 내용 인용..."라고 말씀드렸는데요.
 
-   📅 날짜 표현 방법: 헤더의 날짜를 자연스럽고 친근하게 변환하세요.
-   - "2025년 9월 28일" → "지난 9월달에" 또는 "작년 9월에"
-   - "2025년 3월 10일" → "지난 3월달에" 또는 "올해 3월에"
-   - "2024년 8월 15일" → "2024년 8월달에" 또는 "재작년 8월에"
+   📅 날짜 표현 방법: 오늘은 ${todayStr}입니다. 헤더의 날짜를 오늘 기준으로 자연스럽게 변환하세요.
+   - 올해(${currentYear}년) 설교: "${currentYear}년 1월 12일" → "지난 1월달에" 또는 "올해 1월에"
+   - 작년(${currentYear - 1}년) 설교: "${currentYear - 1}년 9월 28일" → "작년 9월에"
+   - 재작년(${currentYear - 2}년) 이전 설교: "${currentYear - 2}년 8월 15일" → "${currentYear - 2}년 8월달에"
    - 최근 1-2개월 이내면 "얼마 전에", "지난주에" 등도 가능
+   - 이번 주일은 ${thisSundayStr}입니다
 
    🚨 매우 중요: 최원준 목사 설교는 처음부터 끝까지 1인칭으로 작성!
    - ✅ "제가 말씀드렸던..." (O)

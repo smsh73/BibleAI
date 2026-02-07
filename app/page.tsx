@@ -188,7 +188,10 @@ function NewsDetailPopup({
       setFullContent('')
 
       fetch(`/api/news/article?id=${news.articleId}`)
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`${res.status}`)
+          return res.json()
+        })
         .then(data => {
           if (data.success && data.article) {
             setFullContent(data.article.content)
@@ -374,7 +377,12 @@ export default function Home() {
   // 성경 버전 목록 로드 (100% 완료된 버전만, 최초 1회만 실행)
   useEffect(() => {
     fetch('/api/bible/versions')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok || !res.headers.get('content-type')?.includes('application/json')) {
+          throw new Error(`API 응답 오류: ${res.status}`)
+        }
+        return res.json()
+      })
       .then(data => {
         if (data.success) {
           // completedVersions 사용 (100% 임베딩 완료된 버전만)
@@ -539,7 +547,10 @@ export default function Home() {
         emotion
       })
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`${res.status}`)
+        return res.json()
+      })
       .then(data => {
         if (data.success) {
           setComfortImage(data.imageUrl)
@@ -558,7 +569,10 @@ export default function Home() {
         verseReferences: verseRefs
       })
     })
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`${res.status}`)
+        return res.json()
+      })
       .then(data => {
         if (data.success) {
           setPodcastAudio(data.audioUrl)
@@ -896,7 +910,7 @@ export default function Home() {
   ]
 
   return (
-    <div className="relative flex flex-col h-dvh overflow-hidden">
+    <div className="relative flex flex-col h-dvh overflow-hidden" style={{ paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
       {/* 뉴스 상세 팝업 */}
       <NewsDetailPopup news={selectedNews} onClose={() => setSelectedNews(null)} />
 
@@ -937,7 +951,7 @@ export default function Home() {
       {/* 메인 컨텐츠 */}
       <div className="relative flex flex-col h-full z-10">
         {/* 헤더 */}
-        <header className="flex-shrink-0 px-4 py-3 bg-white/90 backdrop-blur-sm">
+        <header className="flex-shrink-0 px-4 py-3 bg-white/90 backdrop-blur-sm" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center justify-between">
               {/* 좌측: 검색 아이콘 (데코용) */}
@@ -1338,7 +1352,7 @@ export default function Home() {
             </div>
 
             {/* 입력 영역 - 이미지 스타일 */}
-            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100">
+            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
               <form onSubmit={handleBibleSubmit} className="max-w-4xl mx-auto">
                 <div className="flex gap-2 items-end">
                   <div className="flex-1 flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm focus-within:border-amber-300 focus-within:ring-2 focus-within:ring-amber-100">
@@ -1511,7 +1525,7 @@ export default function Home() {
             </div>
 
             {/* 입력 영역 - 성경 탭과 동일한 스타일 */}
-            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100">
+            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
               <form onSubmit={handleNewsSubmit} className="max-w-4xl mx-auto">
                 <div className="flex gap-2 items-end">
                   <div className="flex-1 flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100">
@@ -1651,7 +1665,7 @@ export default function Home() {
             </div>
 
             {/* 입력 영역 - 성경 탭과 동일한 스타일 */}
-            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100">
+            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
               <form onSubmit={handleBulletinSubmit} className="max-w-4xl mx-auto">
                 <div className="flex gap-2 items-end">
                   <div className="flex-1 flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm focus-within:border-green-300 focus-within:ring-2 focus-within:ring-green-100">

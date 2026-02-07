@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import {
   performOCR,
   saveNewsIssue,
@@ -31,10 +31,17 @@ const USE_ADVANCED_OCR = process.env.USE_ADVANCED_NEWS_OCR !== 'false'
 // VLM 직접 추출 사용 여부 (환경변수로 제어, 기본값: true - 기존 OCR보다 정확)
 const USE_VLM_EXTRACTION = process.env.USE_VLM_NEWS_EXTRACTION !== 'false'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+// Lazy initialization - runtime에서만 생성
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 /**
  * 중지 요청 확인
@@ -74,7 +81,7 @@ async function updateTaskProgress(currentItem: string, processedCount: number, t
  */
 async function getCachedIssues(): Promise<IssueInfo[]> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('news_issues')
       .select('issue_number, issue_date, year, month, board_id, page_count, status')
       .order('issue_number', { ascending: false })
@@ -100,7 +107,7 @@ async function getCachedIssues(): Promise<IssueInfo[]> {
  */
 async function getLatestCachedIssueNumber(): Promise<number> {
   try {
-    const { data } = await supabase
+    const { data } = await getSupabase()
       .from('news_issues')
       .select('issue_number')
       .order('issue_number', { ascending: false })
@@ -120,7 +127,7 @@ async function getLatestCachedIssueNumber(): Promise<number> {
  */
 async function syncVectorIndex(): Promise<void> {
   try {
-    const { error } = await supabase.rpc('refresh_news_vector_index')
+    const { error } = await getSupabase().rpc('refresh_news_vector_index')
     if (error) {
       console.log('[news/process-stream] refresh_news_vector_index RPC 없음, 기본 동기화 사용')
     } else {
@@ -486,7 +493,7 @@ export async function POST(req: NextRequest) {
           if (fullRescan) {
             // 전체 재스캔: 기존 pending/failed 상태만 삭제 (completed는 유지)
             send({ type: 'progress', step: 'clear', message: '미처리 스캔 정보 초기화 중...', percent: 2 })
-            await supabase.from('news_issues').delete().in('status', ['pending', 'failed'])
+            await getSupabase().from('news_issues').delete().in('status', ['pending', 'failed'])
 
             send({ type: 'progress', step: 'scan', message: '전체 호수 목록 웹 스캔 중...', percent: 5 })
             issues = await scanAllIssues(urlConfig, send)

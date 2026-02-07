@@ -8,16 +8,22 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createEmbedding } from '@/lib/news-extractor'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // API 키 캐시 (Supabase 저장 키 우선)
 let apiKeyCache: Record<string, string> = {}
@@ -31,7 +37,7 @@ async function fetchStoredApiKeys(): Promise<Record<string, string>> {
   }
 
   try {
-    const { data } = await supabase
+    const { data } = await getSupabase()
       .from('api_keys')
       .select('provider, key')
       .eq('is_active', true)
@@ -104,7 +110,7 @@ async function hybridSearch(
   const queryEmbedding = await createEmbedding(query)
 
   // 벡터 검색
-  const { data: vectorResults, error } = await supabase.rpc('hybrid_search_news', {
+  const { data: vectorResults, error } = await getSupabase().rpc('hybrid_search_news', {
     query_embedding: queryEmbedding,
     query_text: query,
     match_threshold: threshold,
@@ -121,8 +127,16 @@ async function hybridSearch(
   return vectorResults || []
 }
 
-// 시스템 프롬프트
-const SYSTEM_PROMPT = `당신은 안양제일교회의 월간 신문 "열한시"의 기사를 분석하고 답변하는 AI 어시스턴트입니다.
+// 시스템 프롬프트 (동적 날짜 포함)
+function getNewsSystemPrompt(): string {
+  const now = new Date()
+  const todayStr = `${now.getFullYear()}년 ${now.getMonth() + 1}월 ${now.getDate()}일`
+
+  return `당신은 안양제일교회의 월간 신문 "열한시"의 기사를 분석하고 답변하는 AI 어시스턴트입니다.
+
+현재 시점 정보:
+- 오늘 날짜: ${todayStr}
+- 날짜를 언급할 때 오늘 기준으로 "지난달", "올해", "작년" 등을 정확히 사용하세요.
 
 역할:
 1. 뉴스 탐색: 사용자가 원하는 주제의 기사를 찾아 요약해 드립니다.
@@ -139,6 +153,7 @@ const SYSTEM_PROMPT = `당신은 안양제일교회의 월간 신문 "열한시"
 - 요약은 핵심 내용 위주로 간결하게
 - 관련 기사가 여러 개면 목록으로 정리
 - 날짜, 인물, 행사명은 정확히 표기`
+}
 
 // 사용자 의도 분석
 function analyzeIntent(query: string): 'search' | 'qa' | 'insight' {
@@ -152,6 +167,7 @@ function analyzeIntent(query: string): 'search' | 'qa' | 'insight' {
 
 export async function POST(req: NextRequest) {
   try {
+    const SYSTEM_PROMPT = getNewsSystemPrompt()
     const { messages, filters } = await req.json()
 
     if (!messages || messages.length === 0) {
@@ -372,7 +388,7 @@ export async function GET(req: NextRequest) {
 
     if (type === 'stats') {
       // 연도별 기사 수
-      const { data: yearStats } = await supabase
+      const { data: yearStats } = await getSupabase()
         .from('news_issues')
         .select('year')
         .eq('status', 'completed')
@@ -383,7 +399,7 @@ export async function GET(req: NextRequest) {
       })
 
       // 기사 유형별 통계
-      const { data: typeStats } = await supabase
+      const { data: typeStats } = await getSupabase()
         .from('news_articles')
         .select('article_type')
 
@@ -394,7 +410,7 @@ export async function GET(req: NextRequest) {
       })
 
       // 최다 언급 키워드
-      const { data: keywords } = await supabase
+      const { data: keywords } = await getSupabase()
         .from('news_articles')
         .select('keywords')
         .not('keywords', 'is', null)

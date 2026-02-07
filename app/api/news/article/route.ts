@@ -5,12 +5,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     // 해당 기사의 모든 청크 조회 (chunk_index 순서대로)
-    const { data: chunks, error } = await supabase
+    const { data: chunks, error } = await getSupabase()
       .from('news_chunks')
       .select('chunk_text, chunk_index, article_title, article_type, issue_number, issue_date, page_number')
       .eq('article_id', articleId)

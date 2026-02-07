@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import {
   performOCR,
   processImageToArticles,
@@ -22,10 +22,17 @@ import {
   saveNewsChunk,
   splitArticles
 } from '@/lib/news-extractor'
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // PDF 파일명에서 호수 정보 추출
 function parseFilename(filename: string): { issueNumber: number; issueDate: string; year: number; month: number } | null {
@@ -188,7 +195,7 @@ export async function POST(req: NextRequest) {
         const fileHash = generateFileHash(buffer)
 
         // 중복 체크
-        const { data: existing } = await supabase
+        const { data: existing } = await getSupabase()
           .from('news_pages')
           .select('id')
           .eq('file_hash', fileHash)
@@ -237,7 +244,7 @@ export async function POST(req: NextRequest) {
           // 이슈가 이미 있는지 확인
           let issueId: number
 
-          const { data: existingIssue } = await supabase
+          const { data: existingIssue } = await getSupabase()
             .from('news_issues')
             .select('id')
             .eq('issue_number', issueInfo.issueNumber)

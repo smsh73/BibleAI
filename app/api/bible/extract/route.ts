@@ -6,12 +6,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // 성경 버전 설정
 const BIBLE_VERSIONS: Record<string, { path: string; encoding: string }> = {
@@ -149,7 +155,7 @@ export async function POST(request: NextRequest) {
             }))
 
             // Upsert (기존 데이터가 있으면 업데이트)
-            const { error } = await supabase
+            const { error } = await getSupabase()
               .from('bible_verses')
               .upsert(versesData, {
                 onConflict: 'version_id,book_name,chapter,verse'

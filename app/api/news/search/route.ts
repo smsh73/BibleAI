@@ -5,13 +5,19 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { createEmbedding } from '@/lib/news-extractor'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,7 +31,7 @@ export async function POST(req: NextRequest) {
     const queryEmbedding = await createEmbedding(query)
 
     // 하이브리드 검색 실행
-    const { data, error } = await supabase.rpc('hybrid_search_news', {
+    const { data, error } = await getSupabase().rpc('hybrid_search_news', {
       query_embedding: queryEmbedding,
       query_text: query,
       match_threshold: 0.4,
@@ -56,17 +62,17 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     // 전체 이슈 수
-    const { count: issueCount } = await supabase
+    const { count: issueCount } = await getSupabase()
       .from('news_issues')
       .select('*', { count: 'exact', head: true })
 
     // 전체 청크 수
-    const { count: chunkCount } = await supabase
+    const { count: chunkCount } = await getSupabase()
       .from('news_chunks')
       .select('*', { count: 'exact', head: true })
 
     // 연도별 통계
-    const { data: yearStats } = await supabase
+    const { data: yearStats } = await getSupabase()
       .from('news_issues')
       .select('year')
       .order('year', { ascending: false })

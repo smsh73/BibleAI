@@ -5,12 +5,19 @@
  */
 
 import OpenAI from 'openai'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+// Supabase 클라이언트 (lazy initialization - runtime에서만 생성)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 interface AudioGenerationResult {
   success: boolean
@@ -33,7 +40,7 @@ interface GenerateAudioParams {
  */
 async function getVoiceId(): Promise<string | null> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('admin_settings')
       .select('value')
       .eq('key', 'voice_settings')

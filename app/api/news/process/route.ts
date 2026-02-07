@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import {
   performOCR,
   processImageToArticles,
@@ -17,10 +17,16 @@ import {
   isIssueProcessed
 } from '@/lib/news-extractor'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // 기본값 (설정이 없을 경우)
 const DEFAULT_BASE_URL = 'https://www.anyangjeil.org'
@@ -543,7 +549,7 @@ async function releaseTaskLock(): Promise<void> {
 async function syncVectorIndex(): Promise<void> {
   try {
     // news_chunks 테이블의 벡터 인덱스 갱신
-    const { error } = await supabase.rpc('refresh_news_vector_index')
+    const { error } = await getSupabase().rpc('refresh_news_vector_index')
     if (error) {
       // RPC가 없으면 기본 동작 (INSERT 후 자동 인덱싱)
       console.log('[news/process] refresh_news_vector_index RPC 없음, 기본 동기화 사용')
@@ -620,7 +626,7 @@ export async function POST(req: NextRequest) {
 
       try {
         // DB에서 호수 정보 가져오기 또는 새로 스캔
-        const { data: existingIssue } = await supabase
+        const { data: existingIssue } = await getSupabase()
           .from('news_issues')
           .select('*')
           .eq('issue_number', issueNumber)
@@ -761,25 +767,25 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     // 전체 통계
-    const { count: totalIssues } = await supabase
+    const { count: totalIssues } = await getSupabase()
       .from('news_issues')
       .select('*', { count: 'exact', head: true })
 
-    const { count: completedIssues } = await supabase
+    const { count: completedIssues } = await getSupabase()
       .from('news_issues')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'completed')
 
-    const { count: totalChunks } = await supabase
+    const { count: totalChunks } = await getSupabase()
       .from('news_chunks')
       .select('*', { count: 'exact', head: true })
 
-    const { count: totalArticles } = await supabase
+    const { count: totalArticles } = await getSupabase()
       .from('news_articles')
       .select('*', { count: 'exact', head: true })
 
     // 최근 처리된 호수
-    const { data: recentIssues } = await supabase
+    const { data: recentIssues } = await getSupabase()
       .from('news_issues')
       .select('*')
       .order('updated_at', { ascending: false })

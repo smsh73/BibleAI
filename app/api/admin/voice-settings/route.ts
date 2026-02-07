@@ -5,12 +5,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 interface VoiceSettings {
   voice_id: string
@@ -24,7 +30,7 @@ interface VoiceSettings {
 export async function GET() {
   try {
     // admin_settings 테이블에서 voice 설정 조회
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('admin_settings')
       .select('key, value, updated_at')
       .eq('key', 'voice_settings')
@@ -84,7 +90,7 @@ export async function POST(req: NextRequest) {
     }
 
     // admin_settings 테이블에 upsert
-    const { error } = await supabase
+    const { error } = await getSupabase()
       .from('admin_settings')
       .upsert({
         key: 'voice_settings',

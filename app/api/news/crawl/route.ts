@@ -5,12 +5,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 const BASE_URL = 'https://www.anyangjeil.org'
 const BOARD_ID = 66
@@ -91,14 +97,14 @@ export async function POST(req: NextRequest) {
 
       // DB에 저장 (기존 것은 업데이트하지 않음)
       for (const issue of uniqueIssues) {
-        const { data: existing } = await supabase
+        const { data: existing } = await getSupabase()
           .from('news_issues')
           .select('id')
           .eq('issue_number', issue.issue_number)
           .single()
 
         if (!existing) {
-          await supabase.from('news_issues').insert(issue)
+          await getSupabase().from('news_issues').insert(issue)
         }
       }
 
@@ -112,7 +118,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'fetch_images') {
       // 특정 호수의 이미지 URL 가져오기
-      const { data: issue } = await supabase
+      const { data: issue } = await getSupabase()
         .from('news_issues')
         .select('*')
         .eq('issue_number', issueNumber)
@@ -144,7 +150,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     // 전체 이슈 상태 조회
-    const { data: issues, error } = await supabase
+    const { data: issues, error } = await getSupabase()
       .from('news_issues')
       .select('*')
       .order('issue_number', { ascending: false })
@@ -153,7 +159,7 @@ export async function GET(req: NextRequest) {
     if (error) throw error
 
     // 상태별 카운트
-    const { data: statusCounts } = await supabase
+    const { data: statusCounts } = await getSupabase()
       .from('news_issues')
       .select('status')
 

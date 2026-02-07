@@ -4,12 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // 테이블이 존재하지 않는 에러인지 확인
 function isTableNotFoundError(error: any): boolean {
@@ -34,7 +40,7 @@ export async function POST(request: NextRequest) {
     // 뉴스 데이터 삭제
     if (type === 'news' || type === 'all') {
       // 청크 삭제
-      const { error: chunksError } = await supabase
+      const { error: chunksError } = await getSupabase()
         .from('news_chunks')
         .delete()
         .neq('id', 0) // 모든 행 삭제
@@ -50,7 +56,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 기사 삭제
-      const { error: articlesError } = await supabase
+      const { error: articlesError } = await getSupabase()
         .from('news_articles')
         .delete()
         .neq('id', 0)
@@ -66,7 +72,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 페이지 삭제
-      const { error: pagesError } = await supabase
+      const { error: pagesError } = await getSupabase()
         .from('news_pages')
         .delete()
         .neq('id', 0)
@@ -82,7 +88,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 호수 삭제
-      const { error: issuesError } = await supabase
+      const { error: issuesError } = await getSupabase()
         .from('news_issues')
         .delete()
         .neq('id', 0)
@@ -100,7 +106,7 @@ export async function POST(request: NextRequest) {
 
     // 성경 임베딩 삭제 (구절은 유지)
     if (type === 'bible' || type === 'all') {
-      const { error: bibleError } = await supabase
+      const { error: bibleError } = await getSupabase()
         .from('bible_verses')
         .update({ embedding: null })
         .neq('id', 0)
@@ -119,7 +125,7 @@ export async function POST(request: NextRequest) {
     // 설교 데이터 삭제
     if (type === 'sermons' || type === 'all') {
       // 설교 청크 삭제
-      const { error: sermonChunksError } = await supabase
+      const { error: sermonChunksError } = await getSupabase()
         .from('sermon_chunks')
         .delete()
         .neq('id', 0)
@@ -135,7 +141,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 설교 삭제
-      const { error: sermonsError } = await supabase
+      const { error: sermonsError } = await getSupabase()
         .from('sermons')
         .delete()
         .neq('id', 0)
@@ -154,7 +160,7 @@ export async function POST(request: NextRequest) {
     // 주보 데이터 삭제
     if (type === 'bulletin' || type === 'all') {
       // 주보 청크 삭제
-      const { error: bulletinChunksError } = await supabase
+      const { error: bulletinChunksError } = await getSupabase()
         .from('bulletin_chunks')
         .delete()
         .neq('id', 0)
@@ -170,7 +176,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 주보 섹션 삭제
-      const { error: bulletinSectionsError } = await supabase
+      const { error: bulletinSectionsError } = await getSupabase()
         .from('bulletin_sections')
         .delete()
         .neq('id', 0)
@@ -186,7 +192,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 주보 호수 삭제 (bulletin_issues 테이블)
-      const { error: bulletinIssuesError } = await supabase
+      const { error: bulletinIssuesError } = await getSupabase()
         .from('bulletin_issues')
         .delete()
         .neq('id', 0)
@@ -202,7 +208,7 @@ export async function POST(request: NextRequest) {
       }
 
       // 주보 삭제 (bulletins 테이블 - 존재하는 경우)
-      const { error: bulletinsError } = await supabase
+      const { error: bulletinsError } = await getSupabase()
         .from('bulletins')
         .delete()
         .neq('id', 0)

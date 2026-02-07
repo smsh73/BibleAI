@@ -13,12 +13,18 @@ import {
   getChurches,
   type CrawlResult
 } from '@/lib/church-crawler'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 /**
  * GET: 교회 목록 및 구조 조회
@@ -33,7 +39,7 @@ export async function GET(req: NextRequest) {
     // 스키마 존재 여부 확인
     if (action === 'checkSchema') {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
           .from('churches')
           .select('id')
           .limit(1)
@@ -84,7 +90,7 @@ export async function GET(req: NextRequest) {
 
     // 크롤링 로그 조회
     if (action === 'logs' && churchCode) {
-      const { data: church } = await supabase
+      const { data: church } = await getSupabase()
         .from('churches')
         .select('id')
         .eq('code', churchCode)
@@ -94,7 +100,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: '교회를 찾을 수 없습니다' }, { status: 404 })
       }
 
-      const { data: logs } = await supabase
+      const { data: logs } = await getSupabase()
         .from('church_crawl_logs')
         .select('*')
         .eq('church_id', church.id)
@@ -106,7 +112,7 @@ export async function GET(req: NextRequest) {
 
     // 분류 체계 조회
     if (action === 'taxonomy' && churchCode) {
-      const { data: church } = await supabase
+      const { data: church } = await getSupabase()
         .from('churches')
         .select('id')
         .eq('code', churchCode)
@@ -116,7 +122,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: '교회를 찾을 수 없습니다' }, { status: 404 })
       }
 
-      const { data: taxonomy } = await supabase
+      const { data: taxonomy } = await getSupabase()
         .from('church_taxonomy')
         .select('*')
         .eq('church_id', church.id)
@@ -146,7 +152,7 @@ export async function POST(req: NextRequest) {
     if (action === 'initSchema') {
       try {
         // churches 테이블 생성
-        const { error: churchesError } = await supabase.rpc('exec_sql', {
+        const { error: churchesError } = await getSupabase().rpc('exec_sql', {
           sql: `
             CREATE TABLE IF NOT EXISTS churches (
               id SERIAL PRIMARY KEY,
@@ -234,7 +240,7 @@ export async function POST(req: NextRequest) {
         // RPC가 없는 경우 직접 테이블 생성 시도
         if (churchesError) {
           // 테이블이 이미 존재하는지 확인하고 없으면 에러 반환
-          const { error: testError } = await supabase
+          const { error: testError } = await getSupabase()
             .from('churches')
             .select('id')
             .limit(1)
@@ -317,7 +323,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: '필수 필드가 누락되었습니다' }, { status: 400 })
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('churches')
         .insert({
           name,
@@ -348,7 +354,7 @@ export async function POST(req: NextRequest) {
       if (name) updateData.name = name
       if (denomination) updateData.denomination = denomination
 
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from('churches')
         .update(updateData)
         .eq('code', code)
@@ -366,7 +372,7 @@ export async function POST(req: NextRequest) {
     if (action === 'updateDictionary') {
       const { churchCode: code, entries } = body
 
-      const { data: church } = await supabase
+      const { data: church } = await getSupabase()
         .from('churches')
         .select('id')
         .eq('code', code)
@@ -378,7 +384,7 @@ export async function POST(req: NextRequest) {
 
       let savedCount = 0
       for (const entry of entries) {
-        const { error } = await supabase
+        const { error } = await getSupabase()
           .from('church_dictionary')
           .upsert({
             church_id: church.id,

@@ -6,12 +6,18 @@
  */
 
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-)
+let _supabase: SupabaseClient | null = null
+
+function getSupabase(): SupabaseClient {
+  if (!_supabase) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+    const key = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+}
 
 // 기본 지원 버전
 const DEFAULT_VERSIONS = [
@@ -24,7 +30,7 @@ const DEFAULT_VERSIONS = [
 export async function GET() {
   try {
     // bible_versions 테이블에서 버전 목록 조회
-    const { data: dbVersions, error: versionsError } = await supabase
+    const { data: dbVersions, error: versionsError } = await getSupabase()
       .from('bible_versions')
       .select('*')
       .eq('is_active', true)
@@ -40,25 +46,25 @@ export async function GET() {
     await Promise.all(versionIds.map(async (versionId) => {
       if (versionId === 'GAE') {
         // GAE는 version_id가 'GAE'이거나 null인 레코드 모두 포함
-        const { count: verseCountGAE } = await supabase
+        const { count: verseCountGAE } = await getSupabase()
           .from('bible_verses')
           .select('*', { count: 'exact', head: true })
           .eq('version_id', 'GAE')
 
-        const { count: verseCountNull } = await supabase
+        const { count: verseCountNull } = await getSupabase()
           .from('bible_verses')
           .select('*', { count: 'exact', head: true })
           .is('version_id', null)
 
         verseCountMap['GAE'] = (verseCountGAE || 0) + (verseCountNull || 0)
 
-        const { count: embeddedCountGAE } = await supabase
+        const { count: embeddedCountGAE } = await getSupabase()
           .from('bible_verses')
           .select('*', { count: 'exact', head: true })
           .eq('version_id', 'GAE')
           .not('embedding', 'is', null)
 
-        const { count: embeddedCountNull } = await supabase
+        const { count: embeddedCountNull } = await getSupabase()
           .from('bible_verses')
           .select('*', { count: 'exact', head: true })
           .is('version_id', null)
@@ -67,14 +73,14 @@ export async function GET() {
         embeddedCountMap['GAE'] = (embeddedCountGAE || 0) + (embeddedCountNull || 0)
       } else {
         // 다른 버전은 해당 version_id만 카운트
-        const { count: verseCount } = await supabase
+        const { count: verseCount } = await getSupabase()
           .from('bible_verses')
           .select('*', { count: 'exact', head: true })
           .eq('version_id', versionId)
 
         verseCountMap[versionId] = verseCount || 0
 
-        const { count: embeddedCount } = await supabase
+        const { count: embeddedCount } = await getSupabase()
           .from('bible_verses')
           .select('*', { count: 'exact', head: true })
           .eq('version_id', versionId)
