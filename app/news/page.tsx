@@ -358,12 +358,13 @@ export default function NewsPage() {
     }
   }
 
-  // 증분 처리 실행 (스트리밍)
-  async function handleProcessIncremental(maxIssues: number = 3) {
+  // 증분 처리 실행 (스트리밍, maxIssues=0이면 전체 처리)
+  async function handleProcessIncremental(maxIssues: number = 0) {
     setCrawlLoading(true)
     setCrawlResults([])
     setProgressPercent(0)
-    setProgressMessage('처리 시작 중...')
+    const pendingCount = scannedIssues.filter(i => i.status !== 'completed').length
+    setProgressMessage(maxIssues === 0 ? `전체 ${pendingCount}개 호수 처리 시작...` : `${maxIssues}개 호수 처리 시작...`)
     setProgressDetail('')
     setProgressLogs([])
 
@@ -941,34 +942,21 @@ export default function NewsPage() {
                         <p className="font-medium text-indigo-900">
                           {scannedIssues.filter(i => i.status !== 'completed').length}개 호수가 처리 대기중입니다
                         </p>
-                        <p className="text-sm text-amber-700 mt-1">
-                          벡터 임베딩 처리를 시작하시겠습니까? (이미 처리된 호수는 자동으로 건너뜁니다)
+                        <p className="text-xs text-amber-600 mt-1">
+                          이미 처리된 호수는 자동으로 건너뜁니다
                         </p>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleProcessIncremental(3)}
-                          disabled={taskLock.locked}
-                          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {taskLock.locked && taskLock.taskType === 'news'
-                            ? '뉴스 추출 진행 중'
-                            : taskLock.locked
-                              ? '다른 작업 진행 중'
-                              : '3개 처리'}
-                        </button>
-                        <button
-                          onClick={() => handleProcessIncremental(scannedIssues.filter(i => i.status !== 'completed').length)}
-                          disabled={taskLock.locked}
-                          className="px-4 py-2 bg-indigo-800 text-white rounded-lg hover:bg-indigo-900 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {taskLock.locked && taskLock.taskType === 'news'
-                            ? '뉴스 추출 진행 중'
-                            : taskLock.locked
-                              ? '다른 작업 진행 중'
-                              : `전체 처리 (${scannedIssues.filter(i => i.status !== 'completed').length}개)`}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleProcessIncremental(0)}
+                        disabled={taskLock.locked}
+                        className="px-5 py-2.5 bg-indigo-700 text-white rounded-lg hover:bg-indigo-800 font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {taskLock.locked && taskLock.taskType === 'news'
+                          ? '처리 중...'
+                          : taskLock.locked
+                            ? '다른 작업 진행 중'
+                            : '전체 처리 시작'}
+                      </button>
                     </div>
                   </div>
                 )}

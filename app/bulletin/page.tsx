@@ -321,10 +321,11 @@ export default function BulletinPage() {
     }
   }
 
-  // 처리 실행
-  async function handleProcess(maxIssues: number = 3) {
+  // 처리 실행 (maxIssues=0이면 전체 처리)
+  async function handleProcess(maxIssues: number = 0) {
     setCrawlLoading(true)
-    setProgressMessage(`${maxIssues}개 주보 처리 중...`)
+    const pendingCount = scannedBulletins.filter(b => b.status !== 'completed').length
+    setProgressMessage(maxIssues === 0 ? `전체 ${pendingCount}개 주보 처리 중...` : `${maxIssues}개 주보 처리 중...`)
 
     try {
       const res = await fetch('/api/bulletin/process', {
@@ -697,23 +698,17 @@ export default function BulletinPage() {
                         <p className="font-medium text-green-900">
                           {scannedBulletins.filter(b => b.status !== 'completed').length}개 주보가 처리 대기중입니다
                         </p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          이미 처리된 주보는 자동으로 건너뜁니다
+                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleProcess(3)}
-                          disabled={taskLock.locked}
-                          className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {taskLock.locked ? (taskLock.taskType === 'bulletin' ? '주보 처리 중...' : '다른 작업 진행 중') : '3개 처리'}
-                        </button>
-                        <button
-                          onClick={() => handleProcess(10)}
-                          disabled={taskLock.locked}
-                          className="px-4 py-2 bg-green-800 text-white rounded-lg hover:bg-green-900 text-sm shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {taskLock.locked ? (taskLock.taskType === 'bulletin' ? '주보 처리 중...' : '다른 작업 진행 중') : '10개 처리'}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleProcess(0)}
+                        disabled={taskLock.locked}
+                        className="px-5 py-2.5 bg-green-700 text-white rounded-lg hover:bg-green-800 font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {taskLock.locked ? (taskLock.taskType === 'bulletin' ? '처리 중...' : '다른 작업 진행 중') : '전체 처리 시작'}
+                      </button>
                     </div>
                   </div>
                 )}
