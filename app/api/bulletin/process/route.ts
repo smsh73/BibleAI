@@ -200,19 +200,41 @@ async function performBasicOCR(imageUrl: string): Promise<string> {
   }
 }
 
-// 개선된 OCR 수행 (다중 모델 교차 검증 + 고유명사 검증)
+// 개선된 OCR 수행 (VLM 구조화 추출 + 페이지 단위 청크)
+interface AdvancedOCRResult {
+  text: string
+  confidence: number
+  warnings: string[]
+  pageType: string
+  sectionTypes: string[]
+  properNouns: {
+    names: string[]
+    positions: string[]
+    places: string[]
+    numbers: string[]
+  }
+}
+
 async function performAdvancedOCR(
   imageUrl: string,
   pageNumber: number
-): Promise<{ text: string; confidence: number; warnings: string[] }> {
+): Promise<AdvancedOCRResult> {
   try {
     // data:... 형식이 아닌 순수 base64만 추출
     const fullBase64 = await downloadImageAsBase64(imageUrl)
-    if (!fullBase64) return { text: '', confidence: 0, warnings: ['이미지 다운로드 실패'] }
+    if (!fullBase64) return {
+      text: '', confidence: 0, warnings: ['이미지 다운로드 실패'],
+      pageType: 'unknown', sectionTypes: [],
+      properNouns: { names: [], positions: [], places: [], numbers: [] }
+    }
 
     // "data:image/jpeg;base64," 부분 제거
     const base64Match = fullBase64.match(/^data:([^;]+);base64,(.+)$/)
-    if (!base64Match) return { text: '', confidence: 0, warnings: ['base64 파싱 실패'] }
+    if (!base64Match) return {
+      text: '', confidence: 0, warnings: ['base64 파싱 실패'],
+      pageType: 'unknown', sectionTypes: [],
+      properNouns: { names: [], positions: [], places: [], numbers: [] }
+    }
 
     const mimeType = base64Match[1]
     const base64Data = base64Match[2]
@@ -220,10 +242,16 @@ async function performAdvancedOCR(
     // 개선된 OCR 모듈 사용
     const analysis = await analyzeBulletinPage(base64Data, pageNumber, mimeType)
 
+    // 섹션 타입 추출 (중복 제거)
+    const sectionTypes = [...new Set(analysis.sections.map(s => s.type).filter(t => t && t !== 'unknown'))]
+
     return {
       text: analysis.validatedText,
       confidence: analysis.overallConfidence,
-      warnings: analysis.warnings
+      warnings: analysis.warnings,
+      pageType: analysis.pageType,
+      sectionTypes,
+      properNouns: analysis.properNouns
     }
   } catch (error: any) {
     console.error('[Bulletin OCR] 개선된 OCR 실패, 기본 OCR로 폴백:', error.message)
@@ -233,28 +261,123 @@ async function performAdvancedOCR(
     return {
       text: validation.correctedText,
       confidence: validation.confidence,
-      warnings: [...validation.warnings, '폴백: 기본 OCR 사용']
+      warnings: [...validation.warnings, '폴백: 기본 OCR 사용'],
+      pageType: 'unknown',
+      sectionTypes: [],
+      properNouns: { names: [], positions: [], places: [], numbers: [] }
     }
   }
 }
 
-// 텍스트를 청크로 분할
+/**
+ * 페이지 단위로 청크 생성 (개선된 방식)
+ *
+ * 주보 특성상 페이지 단위가 검색에 더 적합:
+ * - 한 페이지 내 섹션들이 맥락적으로 연결됨
+ * - 이름+직분+행사가 함께 검색됨
+ * - 청크 수를 줄여 임베딩 비용 절약
+ */
+function createPageChunk(
+  text: string,
+  issueId: number,
+  pageNumber: number,
+  bulletinDate: string,
+  bulletinTitle: string,
+  ocrResult: AdvancedOCRResult
+): any {
+  const dateObj = new Date(bulletinDate)
+  const year = dateObj.getFullYear()
+  const month = dateObj.getMonth() + 1
+
+  // 섹션 타입 결정: VLM 추출 결과 우선, 없으면 텍스트에서 추론
+  let sectionType = '기타'
+  if (ocrResult.sectionTypes.length > 0) {
+    // 주요 섹션 타입 우선순위
+    const priority = ['worship_order', 'church_news', 'prayer_requests', 'announcements', 'offerings', 'new_family', 'volunteers', 'bible_school']
+    for (const p of priority) {
+      if (ocrResult.sectionTypes.includes(p)) {
+        sectionType = p
+        break
+      }
+    }
+  } else {
+    // 텍스트 기반 추론
+    if (text.includes('예배순서') || text.includes('주일예배') || text.includes('설교')) sectionType = 'worship_order'
+    else if (text.includes('교회소식') || text.includes('광고')) sectionType = 'church_news'
+    else if (text.includes('기도제목') || text.includes('중보기도')) sectionType = 'prayer_requests'
+    else if (text.includes('헌금') || text.includes('감사헌금')) sectionType = 'offerings'
+    else if (text.includes('새가족')) sectionType = 'new_family'
+    else if (text.includes('성경공부') || text.includes('말씀묵상')) sectionType = 'bible_school'
+  }
+
+  // 페이지 제목 생성 (VLM pageType 기반)
+  const pageTypeLabels: Record<string, string> = {
+    'worship_order': '예배순서',
+    'church_news': '교회소식',
+    'prayer_requests': '기도제목',
+    'announcements': '광고/공지',
+    'offerings': '헌금',
+    'new_family': '새가족',
+    'volunteers': '봉사자',
+    'bible_school': '성경공부',
+    'mixed': '혼합',
+  }
+  const title = pageTypeLabels[ocrResult.pageType] || `${pageNumber}페이지`
+
+  // 검색 최적화를 위한 메타데이터 포함 텍스트
+  let enrichedContent = text
+
+  // 고유명사가 있으면 상단에 추가 (검색 품질 향상)
+  const { names, positions, places, numbers } = ocrResult.properNouns
+  if (names.length > 0 || places.length > 0) {
+    const metaParts: string[] = []
+    if (names.length > 0) metaParts.push(`[이름: ${names.join(', ')}]`)
+    if (places.length > 0) metaParts.push(`[장소: ${places.join(', ')}]`)
+    if (numbers.length > 0) metaParts.push(`[숫자: ${numbers.join(', ')}]`)
+    enrichedContent = `${metaParts.join(' ')}\n\n${text}`
+  }
+
+  return {
+    issue_id: issueId,
+    page_number: pageNumber,
+    chunk_index: 0,  // 페이지 단위이므로 항상 0
+    section_type: sectionType,
+    title,
+    content: enrichedContent.substring(0, 4000),  // 페이지 단위이므로 더 긴 내용 허용
+    bulletin_date: bulletinDate,
+    bulletin_title: bulletinTitle,
+    year,
+    month
+  }
+}
+
+// 레거시 호환용 (기본 OCR 사용 시)
 function splitIntoChunks(text: string, issueId: number, pageNumber: number, bulletinDate: string, bulletinTitle: string): any[] {
   const chunks: any[] = []
-  const sections = text.split(/###\s*섹션\s*\d+/i).filter(s => s.trim())
+
+  // 섹션 구분 패턴 개선: ### 뒤에 오는 모든 텍스트를 섹션으로 인식
+  const sections = text.split(/###\s*/).filter(s => s.trim())
 
   const dateObj = new Date(bulletinDate)
   const year = dateObj.getFullYear()
   const month = dateObj.getMonth() + 1
 
   sections.forEach((section, idx) => {
-    const typeMatch = section.match(/유형:\s*(.+)/i)
-    const titleMatch = section.match(/제목:\s*(.+)/i)
-    const contentMatch = section.match(/내용:\s*([\s\S]+)/i)
+    // 첫 줄을 제목으로, 나머지를 내용으로
+    const lines = section.split('\n')
+    const title = lines[0]?.trim() || `섹션 ${idx + 1}`
+    const content = lines.slice(1).join('\n').trim() || section.trim()
 
-    const sectionType = typeMatch ? typeMatch[1].trim() : '기타'
-    const title = titleMatch ? titleMatch[1].trim() : `섹션 ${idx + 1}`
-    const content = contentMatch ? contentMatch[1].trim() : section.trim()
+    // 섹션 타입 추론
+    let sectionType = '기타'
+    const lowerTitle = title.toLowerCase()
+    if (lowerTitle.includes('예배') || lowerTitle.includes('설교')) sectionType = 'worship_order'
+    else if (lowerTitle.includes('소식') || lowerTitle.includes('광고')) sectionType = 'church_news'
+    else if (lowerTitle.includes('기도')) sectionType = 'prayer_requests'
+    else if (lowerTitle.includes('헌금') || lowerTitle.includes('감사')) sectionType = 'offerings'
+    else if (lowerTitle.includes('새가족')) sectionType = 'new_family'
+    else if (lowerTitle.includes('성경') || lowerTitle.includes('공부')) sectionType = 'bible_school'
+    else if (lowerTitle.includes('안내')) sectionType = 'announcements'
 
     if (content.length > 30) {
       chunks.push({
@@ -534,46 +657,56 @@ export async function POST(req: NextRequest) {
             let totalWarnings: string[] = []
 
             for (let i = 0; i < imageUrls.length; i++) {
-              let ocrText: string
-              let pageConfidence = 0
-              let pageWarnings: string[] = []
+              let chunks: any[] = []
 
               // 개선된 OCR 사용 (환경변수로 제어, 기본값: true)
               if (USE_ADVANCED_OCR) {
                 const result = await performAdvancedOCR(imageUrls[i], i + 1)
-                ocrText = result.text
-                pageConfidence = result.confidence
-                pageWarnings = result.warnings
 
-                if (pageWarnings.length > 0) {
-                  console.log(`[bulletin/process] 페이지 ${i + 1} 경고:`, pageWarnings.join(', '))
-                  totalWarnings.push(...pageWarnings)
+                if (result.warnings.length > 0) {
+                  console.log(`[bulletin/process] 페이지 ${i + 1} 경고:`, result.warnings.join(', '))
+                  totalWarnings.push(...result.warnings)
                 }
-                console.log(`[bulletin/process] 페이지 ${i + 1} 신뢰도: ${(pageConfidence * 100).toFixed(1)}%`)
+                console.log(`[bulletin/process] 페이지 ${i + 1} 신뢰도: ${(result.confidence * 100).toFixed(1)}%, 타입: ${result.pageType}`)
+
+                if (result.text) {
+                  // 페이지 단위 청크 생성 (VLM 구조화 데이터 활용)
+                  const chunk = createPageChunk(
+                    result.text,
+                    bulletin.id,
+                    i + 1,
+                    bulletin.bulletin_date,
+                    bulletin.title,
+                    result
+                  )
+                  chunks = [chunk]
+                }
               } else {
-                ocrText = await performBasicOCR(imageUrls[i])
+                const ocrText = await performBasicOCR(imageUrls[i])
+                if (ocrText) {
+                  // 레거시: 섹션 단위 청크 생성
+                  chunks = splitIntoChunks(
+                    ocrText,
+                    bulletin.id,
+                    i + 1,
+                    bulletin.bulletin_date,
+                    bulletin.title
+                  )
+                }
               }
 
-              if (ocrText) {
-                const chunks = splitIntoChunks(
-                  ocrText,
-                  bulletin.id,
-                  i + 1,
-                  bulletin.bulletin_date,
-                  bulletin.title
-                )
-
-                for (const chunk of chunks) {
-                  try {
-                    const embedding = await createEmbedding(chunk.content)
-                    await supabase.from('bulletin_chunks').insert({
-                      ...chunk,
-                      embedding
-                    })
-                    totalChunks++
-                  } catch (e) {
-                    console.error('임베딩 오류')
-                  }
+              // 청크 저장 (임베딩 생성)
+              for (const chunk of chunks) {
+                try {
+                  const embedding = await createEmbedding(chunk.content)
+                  await supabase.from('bulletin_chunks').insert({
+                    ...chunk,
+                    embedding
+                  })
+                  totalChunks++
+                  console.log(`[bulletin/process] 청크 저장: 페이지${i + 1}, 타입=${chunk.section_type}, 제목=${chunk.title}`)
+                } catch (e: any) {
+                  console.error(`[bulletin/process] 임베딩 오류: ${e.message}`)
                 }
               }
 
