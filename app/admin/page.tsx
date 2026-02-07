@@ -80,6 +80,7 @@ export default function AdminPage() {
   // 데이터 통계
   const [dataStats, setDataStats] = useState<DataStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(false)
+  const [resetting, setResetting] = useState<string | null>(null)
 
   // Voice 설정
   const [voiceSettings, setVoiceSettings] = useState({
@@ -305,6 +306,7 @@ export default function AdminPage() {
 
     if (!confirm(messages[type])) return
 
+    setResetting(type)
     try {
       const res = await fetch('/api/admin/reset', {
         method: 'POST',
@@ -324,14 +326,16 @@ export default function AdminPage() {
       }
     } catch (error: any) {
       alert(`오류: ${error.message}`)
+    } finally {
+      setResetting(null)
     }
   }
 
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden">
       {/* 배경 */}
-      <div className="absolute inset-0 bg-white" />
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-white to-orange-50" />
+      <div className="absolute inset-0 bg-white pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-white to-orange-50 pointer-events-none" />
 
       {/* 헤더 */}
       <header className="relative z-10 flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
@@ -892,41 +896,25 @@ export default function AdminPage() {
               </p>
 
               <div className="grid grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => handleDataReset('news')}
-                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
-                >
-                  <h3 className="font-semibold text-gray-800 mb-1">뉴스 데이터 삭제</h3>
-                  <p className="text-sm text-gray-500">호수, 기사, 청크, 임베딩 모두 삭제</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDataReset('bulletin')}
-                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
-                >
-                  <h3 className="font-semibold text-gray-800 mb-1">주보 데이터 삭제</h3>
-                  <p className="text-sm text-gray-500">주보, 섹션, 청크 모두 삭제</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDataReset('bible')}
-                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
-                >
-                  <h3 className="font-semibold text-gray-800 mb-1">성경 임베딩 삭제</h3>
-                  <p className="text-sm text-gray-500">구절 텍스트는 유지, 임베딩만 삭제</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleDataReset('sermons')}
-                  className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors"
-                >
-                  <h3 className="font-semibold text-gray-800 mb-1">설교 데이터 삭제</h3>
-                  <p className="text-sm text-gray-500">설교 및 청크 모두 삭제</p>
-                </button>
+                {([
+                  { type: 'news' as const, title: '뉴스 데이터 삭제', desc: '호수, 기사, 청크, 임베딩 모두 삭제' },
+                  { type: 'bulletin' as const, title: '주보 데이터 삭제', desc: '주보, 섹션, 청크 모두 삭제' },
+                  { type: 'bible' as const, title: '성경 임베딩 삭제', desc: '구절 텍스트는 유지, 임베딩만 삭제' },
+                  { type: 'sermons' as const, title: '설교 데이터 삭제', desc: '설교 및 청크 모두 삭제' },
+                ] as const).map(item => (
+                  <button
+                    key={item.type}
+                    type="button"
+                    disabled={resetting !== null}
+                    onClick={() => handleDataReset(item.type)}
+                    className="p-4 border-2 border-amber-200 rounded-lg text-left hover:bg-amber-50 hover:border-amber-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <h3 className="font-semibold text-gray-800 mb-1">
+                      {resetting === item.type ? '삭제 중...' : item.title}
+                    </h3>
+                    <p className="text-sm text-gray-500">{item.desc}</p>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -941,10 +929,11 @@ export default function AdminPage() {
                 </div>
                 <button
                   type="button"
+                  disabled={resetting !== null}
                   onClick={() => handleDataReset('all')}
-                  className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors whitespace-nowrap"
+                  className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  전체 초기화
+                  {resetting === 'all' ? '초기화 중...' : '전체 초기화'}
                 </button>
               </div>
             </div>

@@ -56,7 +56,6 @@ async function getGenAI(): Promise<GoogleGenerativeAI> {
 
 const BULLETIN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> = [
   // 교회명 오류
-  { pattern: /안양제일/g, replacement: '안양제일교회' },
   { pattern: /안양제일교회교회/g, replacement: '안양제일교회' },
 
   // 직함 오류
@@ -69,8 +68,19 @@ const BULLETIN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> 
   { pattern: /만나를/g, replacement: '만나홀' },
   { pattern: /비전젤/g, replacement: '비전센터' },
 
-  // 행사명 오류
+  // 행사명/프로그램명 오류 (VLM 빈번한 오독)
   { pattern: /예배순서지/g, replacement: '예배순서' },
+  { pattern: /영어전목/g, replacement: '영어전폭' },
+  { pattern: /워테이\s*워크샵/g, replacement: '원데이 워크샵' },
+  { pattern: /원테이\s*워크샵/g, replacement: '원데이 워크샵' },
+  { pattern: /전목\s*중국/g, replacement: '전폭 총국' },
+  { pattern: /전폭\s*중국/g, replacement: '전폭 총국' },
+
+  // 한글 오독 (종성/초성 혼동)
+  { pattern: /다갈이/g, replacement: '다같이' },
+  { pattern: /여호와에서/g, replacement: '여호와께서' },
+  { pattern: /법사에\s*감사/g, replacement: '범사에 감사' },
+  { pattern: /가정에배/g, replacement: '가정예배' },
 ]
 
 /**
@@ -108,10 +118,10 @@ const BULLETIN_VLM_PROMPT = `이 이미지는 한국 교회의 주보(예배순�
 이미지의 모든 내용을 분석하여 다음 JSON 형식으로 출력:
 
 {
-  "page_type": "worship_order | church_news | prayer_requests | announcements | mixed",
+  "page_type": "worship_order | sermon_notes | church_news | prayer_requests | announcements | offerings | bible_school | mixed",
   "sections": [
     {
-      "type": "예배순서 | 교회소식 | 기도제목 | 광고 | 새가족 | 헌금 | 봉사자 | 교회학교 | 감사 | 추모 | 기타",
+      "type": "예배순서 | 설교노트 | 교회소식 | 기도제목 | 광고 | 새가족 | 헌금 | 봉사자 | 교회학교 | 감사 | 추모 | 기타",
       "title": "섹션 제목 (정확히)",
       "content": "본문 내용 (정확히, 줄바꿈 유지)",
       "items": [
@@ -132,7 +142,16 @@ const BULLETIN_VLM_PROMPT = `이 이미지는 한국 교회의 주보(예배순�
 - 모든 섹션을 빠짐없이 추출
 - 이름+직분 조합 주의 (예: "김OO 장로")
 - 숫자(금액, 날짜, 시간) 정확히
-- JSON만 출력, 다른 설명 없이`
+- JSON만 출력, 다른 설명 없이
+- 마크다운 기호(#, *, _, ~, \`)를 사용하지 말 것. 일반 텍스트로만 출력
+
+참고 - 이 교회에서 자주 등장하는 용어:
+- 전도폭발(전폭): 전도 프로그램 (영어전폭 = 영어 전도폭발)
+- 원데이 워크샵: 전도폭발 집중 교육
+- 브릿지전도학교, 쿠티학교, 중보기도세미나: 양육 프로그램
+- 만나홀, 비전센터, 비전홀, 평강홀, 미스바: 교회 내 장소명
+- 전도회, 선교회, 권사회, 집사회: 교회 조직명
+- 위임목사, 부목사, 전도사: 직함`
 
 /**
  * VLM으로 주보 직접 구조화 추출
@@ -317,9 +336,16 @@ export async function extractBulletinWithVLM(
 function mapPageType(type: string): BulletinPageType {
   const typeMap: Record<string, BulletinPageType> = {
     'worship_order': 'worship_order',
+    'sermon_notes': 'sermon_notes',
     'church_news': 'church_news',
     'prayer_requests': 'prayer_requests',
     'announcements': 'announcements',
+    'offerings': 'offerings',
+    'bible_school': 'bible_school',
+    'new_family': 'new_family',
+    'volunteers': 'volunteers',
+    'memorial': 'memorial',
+    'thanksgiving': 'thanksgiving',
     'mixed': 'mixed',
   }
   return typeMap[type] || 'unknown'
@@ -329,6 +355,7 @@ function mapPageType(type: string): BulletinPageType {
 
 export type BulletinPageType =
   | 'worship_order'      // 예배순서
+  | 'sermon_notes'       // 설교노트
   | 'church_news'        // 교회소식
   | 'prayer_requests'    // 기도제목
   | 'announcements'      // 광고/공지
@@ -633,6 +660,9 @@ function parseSections(ocrText: string): BulletinSection[] {
 function mapSectionType(type: string): BulletinPageType {
   const typeMap: Record<string, BulletinPageType> = {
     '예배순서': 'worship_order',
+    '설교노트': 'sermon_notes',
+    '설교': 'sermon_notes',
+    '말씀묵상': 'sermon_notes',
     '교회소식': 'church_news',
     '기도제목': 'prayer_requests',
     '광고': 'announcements',
@@ -712,9 +742,28 @@ export async function analyzeBulletinPage(
       console.log(`[Bulletin VLM] ${vlmResult.provider}로 추출 완료 (${vlmResult.duration}ms)`)
       console.log(`[Bulletin VLM] 섹션 ${vlmResult.data.sections.length}개, 교정 ${vlmResult.corrections.length}건`)
 
-      // 전체 텍스트 조합
+      // 전체 텍스트 조합 (마크다운 기호 제거, items 보완)
       const validatedText = vlmResult.data.sections
-        .map(s => `### ${s.title || s.type}\n${s.content}`)
+        .map(s => {
+          const title = (s.title || s.type).replace(/[#*_~`>]/g, '').trim()
+          const content = (s.content || '').replace(/[#*_~`>]/g, '').trim()
+
+          // items → 텍스트 변환 (content가 짧을 때만 추가하여 중복 방지)
+          let itemsText = ''
+          if (s.items && Array.isArray(s.items) && s.items.length > 0 && content.length < 50) {
+            itemsText = s.items
+              .map((item: BulletinItem) => {
+                const label = (item.label || '').replace(/[#*_~`>]/g, '').trim()
+                const value = (item.value || '').replace(/[#*_~`>]/g, '').trim()
+                return label && value ? `${label}: ${value}` : label || value
+              })
+              .filter((line: string) => line.length > 0)
+              .join('\n')
+          }
+
+          const parts = [content, itemsText].filter(p => p.length > 0)
+          return `${title}\n${parts.join('\n')}`
+        })
         .join('\n\n')
 
       // 경고 수집

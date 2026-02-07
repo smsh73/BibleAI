@@ -901,7 +901,7 @@ export default function Home() {
       <NewsDetailPopup news={selectedNews} onClose={() => setSelectedNews(null)} />
 
       {/* 배경 */}
-      <div className="absolute inset-0 bg-white" />
+      <div className="absolute inset-0 bg-white pointer-events-none" />
 
       {/* 따뜻한 그라데이션 블롭 배경 (성경 탭에서만) */}
       {activeTab === 'bible' && (
@@ -926,12 +926,12 @@ export default function Home() {
 
       {/* 뉴스 탭 배경 */}
       {activeTab === 'news' && (
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/50" />
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/50 pointer-events-none" />
       )}
 
       {/* 주보 탭 배경 */}
       {activeTab === 'bulletin' && (
-        <div className="absolute inset-0 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50" />
+        <div className="absolute inset-0 bg-gradient-to-br from-green-50/50 via-white to-emerald-50/50 pointer-events-none" />
       )}
 
       {/* 메인 컨텐츠 */}

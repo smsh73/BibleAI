@@ -457,8 +457,8 @@ export default function ChurchDictionaryAdmin() {
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden">
       {/* 배경 */}
-      <div className="absolute inset-0 bg-white" />
-      <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50" />
+      <div className="absolute inset-0 bg-white pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-indigo-50 via-white to-purple-50 pointer-events-none" />
 
       {/* 메인 */}
       <div className="relative flex flex-col h-full z-10">

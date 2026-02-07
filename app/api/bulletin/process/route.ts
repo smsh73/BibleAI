@@ -293,7 +293,7 @@ function createPageChunk(
   let sectionType = '기타'
   if (ocrResult.sectionTypes.length > 0) {
     // 주요 섹션 타입 우선순위
-    const priority = ['worship_order', 'church_news', 'prayer_requests', 'announcements', 'offerings', 'new_family', 'volunteers', 'bible_school']
+    const priority = ['worship_order', 'sermon_notes', 'church_news', 'prayer_requests', 'announcements', 'offerings', 'new_family', 'volunteers', 'bible_school']
     for (const p of priority) {
       if (ocrResult.sectionTypes.includes(p)) {
         sectionType = p
@@ -302,7 +302,8 @@ function createPageChunk(
     }
   } else {
     // 텍스트 기반 추론
-    if (text.includes('예배순서') || text.includes('주일예배') || text.includes('설교')) sectionType = 'worship_order'
+    if (text.includes('예배순서') || text.includes('주일예배')) sectionType = 'worship_order'
+    else if (text.includes('설교노트') || text.includes('설교요약') || text.includes('말씀정리') || (text.includes('설교') && text.includes('본문'))) sectionType = 'sermon_notes'
     else if (text.includes('교회소식') || text.includes('광고')) sectionType = 'church_news'
     else if (text.includes('기도제목') || text.includes('중보기도')) sectionType = 'prayer_requests'
     else if (text.includes('헌금') || text.includes('감사헌금')) sectionType = 'offerings'
@@ -313,6 +314,7 @@ function createPageChunk(
   // 페이지 제목 생성 (VLM pageType 기반)
   const pageTypeLabels: Record<string, string> = {
     'worship_order': '예배순서',
+    'sermon_notes': '설교노트',
     'church_news': '교회소식',
     'prayer_requests': '기도제목',
     'announcements': '광고/공지',
@@ -324,8 +326,19 @@ function createPageChunk(
   }
   const title = pageTypeLabels[ocrResult.pageType] || `${pageNumber}페이지`
 
+  // 마크다운 기호 제거
+  const cleanText = text
+    .replace(/^#{1,6}\s*/gm, '')       // # 헤더 제거
+    .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')  // *bold*, **bold**, ***bold*** → 텍스트만
+    .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')     // _italic_ 등 제거
+    .replace(/~~([^~]+)~~/g, '$1')     // ~~취소선~~ 제거
+    .replace(/`([^`]+)`/g, '$1')       // `code` 제거
+    .replace(/^>\s*/gm, '')            // > 인용 제거
+    .replace(/^[-*+]\s+/gm, '- ')     // 리스트 마커 통일
+    .replace(/^\d+\.\s+/gm, (m) => m) // 번호 리스트는 유지
+
   // 검색 최적화를 위한 메타데이터 포함 텍스트
-  let enrichedContent = text
+  let enrichedContent = cleanText
 
   // 고유명사가 있으면 상단에 추가 (검색 품질 향상)
   const { names, positions, places, numbers } = ocrResult.properNouns
@@ -334,7 +347,7 @@ function createPageChunk(
     if (names.length > 0) metaParts.push(`[이름: ${names.join(', ')}]`)
     if (places.length > 0) metaParts.push(`[장소: ${places.join(', ')}]`)
     if (numbers.length > 0) metaParts.push(`[숫자: ${numbers.join(', ')}]`)
-    enrichedContent = `${metaParts.join(' ')}\n\n${text}`
+    enrichedContent = `${metaParts.join(' ')}\n\n${cleanText}`
   }
 
   return {
@@ -365,8 +378,16 @@ function splitIntoChunks(text: string, issueId: number, pageNumber: number, bull
   sections.forEach((section, idx) => {
     // 첫 줄을 제목으로, 나머지를 내용으로
     const lines = section.split('\n')
-    const title = lines[0]?.trim() || `섹션 ${idx + 1}`
-    const content = lines.slice(1).join('\n').trim() || section.trim()
+    const rawTitle = lines[0]?.trim() || `섹션 ${idx + 1}`
+    const title = rawTitle.replace(/[#*_~`>]/g, '').trim()
+    const rawContent = lines.slice(1).join('\n').trim() || section.trim()
+    const content = rawContent
+      .replace(/^#{1,6}\s*/gm, '')
+      .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+      .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')
+      .replace(/~~([^~]+)~~/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^>\s*/gm, '')
 
     // 섹션 타입 추론
     let sectionType = '기타'

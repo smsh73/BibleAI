@@ -509,8 +509,8 @@ export default function NewsPage() {
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden">
       {/* 배경 */}
-      <div className="absolute inset-0 bg-white" />
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-white to-orange-50" />
+      <div className="absolute inset-0 bg-white pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-50 via-white to-orange-50 pointer-events-none" />
 
       {/* 헤더 */}
       <header className="relative z-10 flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
