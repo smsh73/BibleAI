@@ -23,7 +23,7 @@ export default function JesusSilhouette({
       style={{ opacity }}
     >
       <Image
-        src="/images/jesus's siluet.webp"
+        src="/images/jesus-silhouette.webp"
         alt=""
         fill
         className="object-contain"
