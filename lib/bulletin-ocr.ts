@@ -90,7 +90,6 @@ const BULLETIN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> 
   { pattern: /설증댄/g, replacement: '설교댄스' },
   { pattern: /벤잔/g, replacement: '벤젠' },
   { pattern: /절은부부교구/g, replacement: '젊은부부교구' },
-  { pattern: /젊은부부교구/g, replacement: '젊은부부교구' },
   { pattern: /급수\s*새벽예배/g, replacement: '금요 새벽예배' },
   { pattern: /돌례북가/g, replacement: '돌려복자' },
   { pattern: /개인헌급려윰/g, replacement: '개인헌금내역' },
@@ -98,9 +97,43 @@ const BULLETIN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> 
   { pattern: /생명된/g, replacement: '생명의' },
   { pattern: /업김성선/g, replacement: '엄김성선' },
   { pattern: /총관한/g, replacement: '총괄한' },
-  { pattern: /채루팀/g, replacement: '찬양팀' },
   { pattern: /용고\s*그늘/g, replacement: '용기의 그늘' },
   { pattern: /C\.G\.N\s*밤문/g, replacement: 'CGN 방문' },
+
+  // 찬양대/음악 사역 오독
+  { pattern: /채루팀/g, replacement: '체루빔' },
+  { pattern: /채루밀/g, replacement: '체루빔' },
+  { pattern: /채루빈/g, replacement: '체루빔' },
+  { pattern: /예청/g, replacement: '예찬' },
+
+  // 직함 오독 (추가)
+  { pattern: /잡로/g, replacement: '장로' },
+
+  // 장소명 오독 (추가)
+  { pattern: /들나무/g, replacement: '등나무' },
+  { pattern: /뱀일관/g, replacement: '벧엘관' },
+  { pattern: /벰일관/g, replacement: '벧엘관' },
+  { pattern: /우치부실/g, replacement: '유치부실' },
+
+  // 헌금/재정 오독
+  { pattern: /온성도원집신교헌금/g, replacement: '온성도월정선교헌금' },
+  { pattern: /원집신교헌금/g, replacement: '월정선교헌금' },
+  { pattern: /원정신교헌금/g, replacement: '월정선교헌금' },
+
+  // 로그 분석 추가 패턴 (2차)
+  { pattern: /예창조나단/g, replacement: '예찬 소나타' },
+  { pattern: /예찬코니단/g, replacement: '예찬 소나타' },
+  { pattern: /요정허웅법/g, replacement: '요청하옵니다' },
+  { pattern: /요정교회용/g, replacement: '요청 교회용' },
+  { pattern: /청은부부교구/g, replacement: '젊은부부교구' },
+  { pattern: /한원신교/g, replacement: '한인선교' },
+  { pattern: /인업재일/g, replacement: '인업제일' },
+  { pattern: /헤게당/g, replacement: '해당' },
+  { pattern: /헤네관/g, replacement: '해당' },
+  { pattern: /오므라인/g, replacement: '온라인' },
+  { pattern: /귀즈이벤트/g, replacement: '퀴즈이벤트' },
+  { pattern: /위즈이벤트/g, replacement: '퀴즈이벤트' },
+  { pattern: /심로/g, replacement: '심리' },
 ]
 
 /**
@@ -169,18 +202,24 @@ const BULLETIN_VLM_PROMPT = `이 이미지는 한국 교회의 주보(예배순�
 - 전도폭발(전폭): 전도 프로그램 (영어전폭 = 영어 전도폭발)
 - 원데이 워크샵: 전도폭발 집중 교육
 - 브릿지전도학교, 쿠티학교, 중보기도세미나: 양육 프로그램
-- 만나홀, 비전센터, 비전홀, 평강홀, 미스바, 이레홀: 교회 내 장소명
+- 만나홀, 비전센터, 비전홀, 평강홀, 미스바, 이레홀, 벧엘관, 유치부실: 교회 내 장소명
 - 전도회, 선교회, 권사회, 집사회, 젊은부부교구: 교회 조직명
-- 위임목사, 부목사, 전도사, 강도사: 직함
+- 위임목사, 부목사, 전도사, 강도사, 장로, 권사, 집사: 직함
+- 체루빔: 찬양대 이름 (절대 "채루팀", "채루밀"로 읽지 말 것)
 - 예찬 소나타, 예찬 오케스트라, 예찬 코리아: 음악 사역 이름
 - CGN, 선교한국, 인터콥: 선교 관련 단체
 - 금요 새벽예배, 수요 예배, 주일 예배: 예배 일정
+- 온성도월정선교헌금: 선교 헌금 항목 (절대 "온성도원집신교헌금"으로 읽지 말 것)
+- 등나무: 식물/장소명 (절대 "들나무"로 읽지 말 것)
 - 다같이 (이 단어를 "다갈이"로 오독하지 말 것)
 
 ⚠️ 중요한 오독 주의사항:
-- "예찬"을 "예창"으로, "소나타"를 "조나타"로 읽지 말 것
+- "체루빔"(찬양대)을 "채루팀", "채루밀", "채루빈"으로 읽지 말 것
+- "예찬"을 "예창", "예청"으로 읽지 말 것. "소나타"를 "조나타"로 읽지 말 것
+- "장로"를 "잡로"로 읽지 말 것
 - "젊은"을 "절은"으로 읽지 말 것
-- "찬양"을 "채루"로 읽지 말 것
+- "벧엘관"을 "뱀일관"으로, "유치부실"을 "우치부실"로 읽지 말 것
+- "월정선교헌금"을 "원집신교헌금"으로 읽지 말 것
 - 숫자 뒤의 원(①②③)은 그대로 표기`
 
 /**

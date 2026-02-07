@@ -282,19 +282,33 @@ function createPageChunk(
   const year = dateObj.getFullYear()
   const month = dateObj.getMonth() + 1
 
-  // 섹션 타입 결정: VLM 추출 결과 우선, 없으면 텍스트에서 추론
+  // 섹션 타입 결정: VLM 추출 결과 우선, 없으면 pageType, 없으면 텍스트에서 추론
   let sectionType = '기타'
   if (ocrResult.sectionTypes.length > 0) {
-    // 주요 섹션 타입 우선순위
-    const priority = ['worship_order', 'sermon_notes', 'church_news', 'prayer_requests', 'announcements', 'offerings', 'new_family', 'volunteers', 'bible_school']
-    for (const p of priority) {
-      if (ocrResult.sectionTypes.includes(p)) {
-        sectionType = p
-        break
+    if (ocrResult.pageType === 'mixed') {
+      // mixed 페이지: worship_order 외 가장 대표적인 타입 선택
+      // (worship_order는 거의 모든 페이지에 포함되므로 mixed에서는 우선순위가 낮음)
+      const nonWorshipTypes = ocrResult.sectionTypes.filter(t => t !== 'worship_order')
+      sectionType = nonWorshipTypes.length > 0 ? nonWorshipTypes[0] : ocrResult.sectionTypes[0]
+    } else {
+      // 단일 타입 페이지: 우선순위 기반 선택
+      const priority = ['worship_order', 'sermon_notes', 'church_news', 'prayer_requests', 'announcements', 'offerings', 'new_family', 'volunteers', 'bible_school']
+      for (const p of priority) {
+        if (ocrResult.sectionTypes.includes(p)) {
+          sectionType = p
+          break
+        }
       }
     }
-  } else {
-    // 텍스트 기반 추론
+  }
+
+  // sectionType이 여전히 '기타'이면 pageType 사용 (VLM이 pageType은 인식했지만 sections 타입이 매핑 안 된 경우)
+  if (sectionType === '기타' && ocrResult.pageType && ocrResult.pageType !== 'unknown' && ocrResult.pageType !== 'mixed') {
+    sectionType = ocrResult.pageType
+  }
+
+  // 그래도 '기타'이면 텍스트 기반 추론
+  if (sectionType === '기타') {
     if (text.includes('예배순서') || text.includes('주일예배')) sectionType = 'worship_order'
     else if (text.includes('설교노트') || text.includes('설교요약') || text.includes('말씀정리') || (text.includes('설교') && text.includes('본문'))) sectionType = 'sermon_notes'
     else if (text.includes('교회소식') || text.includes('광고')) sectionType = 'church_news'
