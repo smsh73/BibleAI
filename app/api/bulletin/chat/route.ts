@@ -211,6 +211,7 @@ export async function POST(req: NextRequest) {
             encoder.encode(`data: ${JSON.stringify({
               type: 'sources',
               sources: searchResults.slice(0, 5).map(r => ({
+                issueId: r.issue_id,
                 bulletinDate: r.bulletin_date,
                 bulletinTitle: r.bulletin_title,
                 pageNumber: r.page_number,

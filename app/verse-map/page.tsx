@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import dynamic from 'next/dynamic'
 import ResponsiveNav from '@/components/ResponsiveNav'
+import JesusSilhouette from '@/components/JesusSilhouette'
 
 // 그래프 시각화 컴포넌트 (SSR 비활성화)
 const VerseGraphVisualization = dynamic(
@@ -334,28 +335,41 @@ export default function VerseMapPage() {
 
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden">
-      {/* 배경 */}
+      {/* 배경 - 홈화면과 동일한 따뜻한 디자인 */}
       <div className="absolute inset-0 bg-white pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-b from-rose-50/20 via-white to-rose-50/30 pointer-events-none" />
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* 중앙 따뜻한 빛 그라데이션 */}
+        <div
+          className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] rounded-full"
+          style={{
+            background: 'radial-gradient(circle, rgba(251,191,36,0.4) 0%, rgba(251,146,60,0.3) 35%, rgba(253,224,71,0.15) 65%, transparent 100%)',
+            filter: 'blur(30px)',
+          }}
+        />
+        {/* 예수님 실루엣 */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2">
+          <JesusSilhouette className="w-[280px] h-[320px] select-none" opacity={0.15} />
+        </div>
+      </div>
 
       {/* 헤더 */}
       <header className="relative z-10 flex-shrink-0 px-4 py-2 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold text-rose-800">{t('verseMap.title')}</h1>
+            <h1 className="text-lg font-semibold text-amber-700">{t('verseMap.title')}</h1>
             <ResponsiveNav />
           </div>
         </div>
       </header>
 
       {/* 검색 바 */}
-      <div className="relative z-10 bg-white/80 backdrop-blur-sm border-b border-rose-100/50 sticky top-0">
+      <div className="relative z-10 bg-white/80 backdrop-blur-sm border-b border-amber-100/50 sticky top-0">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center gap-4">
             {history.length > 0 && (
               <button
                 onClick={handleBack}
-                className="text-rose-500 hover:text-rose-600 text-sm flex items-center gap-1"
+                className="text-amber-500 hover:text-amber-600 text-sm flex items-center gap-1"
               >
                 ← {t('verseMap.back')}
               </button>
@@ -368,11 +382,11 @@ export default function VerseMapPage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={t('verseMap.searchPlaceholder')}
-                className="flex-1 px-4 py-2 border border-rose-200 rounded-full focus:outline-none focus:ring-2 focus:ring-rose-100 focus:border-rose-300 text-sm text-gray-900 bg-white"
+                className="flex-1 px-4 py-2 border border-amber-200 rounded-full focus:outline-none focus:ring-2 focus:ring-amber-100 focus:border-amber-300 text-sm text-gray-900 bg-white"
               />
               <button
                 type="submit"
-                className="px-4 py-2 bg-rose-400 hover:bg-rose-500 text-white rounded-full text-sm whitespace-nowrap shadow-sm transition-colors"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-full text-sm whitespace-nowrap shadow-sm transition-colors"
               >
                 {t('verseMap.explore')}
               </button>
@@ -386,8 +400,8 @@ export default function VerseMapPage() {
         {loading && (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <div className="animate-spin w-10 h-10 border-4 border-rose-300 border-t-transparent rounded-full mx-auto" />
-              <p className="mt-4 text-rose-600">{t('verseMap.loading')}</p>
+              <div className="animate-spin w-10 h-10 border-4 border-amber-300 border-t-transparent rounded-full mx-auto" />
+              <p className="mt-4 text-amber-600">{t('verseMap.loading')}</p>
             </div>
           </div>
         )}
@@ -407,10 +421,10 @@ export default function VerseMapPage() {
           <div className="space-y-6">
             {/* 헤더 */}
             <div className="text-center">
-              <h2 className="text-xl font-bold text-rose-800 mb-2">
+              <h2 className="text-xl font-bold text-amber-700 mb-2">
                 {t('verseMap.welcomeTitle')}
               </h2>
-              <p className="text-rose-500 text-sm">
+              <p className="text-amber-500 text-sm">
                 {language === 'en' ? 'Select a book, chapter, and verse to explore connections' : '책을 선택하고 장과 절을 클릭하세요'}
               </p>
             </div>
@@ -423,7 +437,7 @@ export default function VerseMapPage() {
                 </h3>
 
                 {/* 책 그리드 - 두꺼운 테두리 스타일 */}
-                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13 gap-1.5">
+                <div className="grid grid-cols-5 sm:grid-cols-7 md:grid-cols-9 lg:grid-cols-11 gap-1">
                   {BIBLE_BOOKS.filter(b => b.testament === testament).map((book) => {
                     const isSelected = selectedBook?.name === book.name
 
@@ -432,10 +446,10 @@ export default function VerseMapPage() {
                         key={book.name}
                         onClick={() => handleBookClick(book)}
                         className={`
-                          px-1.5 py-1.5 rounded-lg text-xs font-medium transition-all
+                          px-2 py-2 rounded-lg text-[15px] font-medium transition-all
                           ${isSelected
-                            ? 'bg-rose-50 text-rose-700 border-2 border-rose-400 shadow-sm'
-                            : 'bg-white border-2 border-gray-800 text-gray-700 hover:border-rose-400 hover:bg-rose-50'
+                            ? 'bg-amber-50 text-amber-700 border-2 border-amber-400 shadow-sm'
+                            : 'bg-white border border-gray-300 text-gray-700 hover:border-amber-400 hover:bg-amber-50'
                           }
                         `}
                         title={book.name}
@@ -448,7 +462,7 @@ export default function VerseMapPage() {
 
                 {/* 선택된 책의 장/절 표시 - 두꺼운 테두리 스타일 */}
                 {selectedBook && selectedBook.testament === testament && (
-                  <div className="bg-white rounded-xl border-2 border-gray-800 p-4 shadow-sm animate-fade-in w-full">
+                  <div className="bg-white rounded-xl border border-gray-300 p-4 shadow-sm animate-fade-in w-full">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-semibold text-gray-800">
                         {selectedBook.name}
@@ -464,8 +478,8 @@ export default function VerseMapPage() {
                       </button>
                     </div>
 
-                    {/* 장 그리드 - 두꺼운 테두리 스타일 */}
-                    <div className="grid grid-cols-10 gap-1.5 mb-3">
+                    {/* 장 그리드 */}
+                    <div className="grid grid-cols-8 gap-1 mb-3">
                       {selectedBook.chapters.map((verseCount, idx) => {
                         const chapter = idx + 1
                         const isChapterSelected = selectedChapter === chapter
@@ -475,10 +489,10 @@ export default function VerseMapPage() {
                             key={chapter}
                             onClick={() => handleChapterClick(chapter)}
                             className={`
-                              w-full py-1.5 rounded-lg text-xs font-medium transition-all
+                              w-full py-2 rounded-lg text-[15px] font-medium transition-all
                               ${isChapterSelected
-                                ? 'bg-rose-50 text-rose-700 border-2 border-rose-400 shadow-sm'
-                                : 'bg-white text-gray-700 border-2 border-gray-800 hover:border-rose-400 hover:bg-rose-50'
+                                ? 'bg-amber-50 text-amber-700 border-2 border-amber-400 shadow-sm'
+                                : 'bg-white text-gray-700 border border-gray-300 hover:border-amber-400 hover:bg-amber-50'
                               }
                             `}
                           >
@@ -494,12 +508,12 @@ export default function VerseMapPage() {
                         <p className="text-xs text-gray-500 mb-2">
                           {selectedBook.name} {selectedChapter}{language === 'en' ? ':' : '장'} - {language === 'en' ? 'Select verse' : '절 선택'}
                         </p>
-                        <div className="grid grid-cols-10 gap-1.5 max-h-48 overflow-y-auto">
+                        <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                           {Array.from({ length: selectedBook.chapters[selectedChapter - 1] }, (_, i) => i + 1).map((verse) => (
                             <button
                               key={verse}
                               onClick={() => handleVerseSelect(selectedBook, selectedChapter, verse)}
-                              className="w-full py-1.5 rounded-lg text-xs font-medium transition-all bg-white border-2 border-gray-800 text-gray-700 hover:border-rose-400 hover:bg-rose-50"
+                              className="w-full py-2 rounded-lg text-[15px] font-medium transition-all bg-white border border-gray-300 text-gray-700 hover:border-amber-400 hover:bg-amber-50"
                             >
                               {verse}
                             </button>

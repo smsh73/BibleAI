@@ -5,7 +5,7 @@
  * 탭 기반 인터페이스: 성경 상담 / 뉴스 AI
  */
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { EMOTIONS, type EmotionType, type ChatMessage } from '@/types'
 import JesusSilhouette from '@/components/JesusSilhouette'
@@ -142,6 +142,84 @@ function parseBibleReferences(text: string): React.ReactNode[] {
   }
 
   return parts.length > 0 ? parts : [text]
+}
+
+// 마크다운 기호를 제거하고 서식으로 변환하는 함수
+function formatMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split('\n')
+  const result: React.ReactNode[] = []
+
+  lines.forEach((line, lineIdx) => {
+    if (lineIdx > 0) {
+      result.push('\n')
+    }
+
+    // 헤딩 기호 제거 (### 제목 → 제목)
+    let processedLine = line.replace(/^#{1,6}\s+/, '')
+    // 블록인용 기호 제거
+    processedLine = processedLine.replace(/^>\s?/, '')
+    // 수평선 제거
+    processedLine = processedLine.replace(/^[-*_]{3,}\s*$/, '')
+
+    // 볼드+이탤릭 (***text***) → 볼드처리
+    // 볼드 (**text**) → <strong>
+    // 이탤릭 (*text*) → 텍스트만
+    const parts: React.ReactNode[] = []
+    let remaining = processedLine
+    let partKey = 0
+
+    // **bold** 패턴 처리
+    const boldRegex = /\*{2,3}([^*]+)\*{2,3}/g
+    let lastIdx = 0
+    let match
+
+    while ((match = boldRegex.exec(remaining)) !== null) {
+      if (match.index > lastIdx) {
+        // 볼드 앞의 일반 텍스트 (단독 * 제거)
+        parts.push(remaining.slice(lastIdx, match.index).replace(/\*/g, ''))
+      }
+      parts.push(
+        <strong key={`b-${lineIdx}-${partKey++}`} className="font-semibold">
+          {match[1]}
+        </strong>
+      )
+      lastIdx = match.index + match[0].length
+    }
+
+    if (lastIdx < remaining.length) {
+      // 남은 텍스트에서 단독 * 제거
+      parts.push(remaining.slice(lastIdx).replace(/\*/g, ''))
+    }
+
+    if (parts.length > 0) {
+      result.push(...parts)
+    } else {
+      result.push(processedLine)
+    }
+  })
+
+  return result
+}
+
+// parseBibleReferences 결과에 마크다운 서식 적용
+function formatMessage(text: string): React.ReactNode[] {
+  // 먼저 성경 참조를 파싱
+  const bibleParsed = parseBibleReferences(text)
+
+  // 각 파트에 대해 마크다운 서식 적용
+  const result: React.ReactNode[] = []
+  bibleParsed.forEach((part, idx) => {
+    if (typeof part === 'string') {
+      result.push(...formatMarkdown(part).map((node, nIdx) =>
+        typeof node === 'string' ? node : <span key={`fm-${idx}-${nIdx}`}>{node}</span>
+      ))
+    } else {
+      // 이미 React 요소 (성경 링크 등) - 그대로 유지
+      result.push(part)
+    }
+  })
+
+  return result
 }
 
 // 간단한 인사/짧은 메시지 감지 함수
@@ -374,6 +452,37 @@ export default function Home() {
   const [bulletinYearFilter, setBulletinYearFilter] = useState<number | undefined>()
   const bulletinMessagesEndRef = useRef<HTMLDivElement>(null)
 
+  // 주보 이미지 뷰어 상태
+  const [bulletinViewer, setBulletinViewer] = useState<{
+    issueId: number
+    pages: { id: number; page_number: number; image_url: string }[]
+    currentPage: number
+    bulletinTitle: string
+  } | null>(null)
+  const [bulletinViewerLoading, setBulletinViewerLoading] = useState(false)
+
+  // 주보 이미지 뷰어 열기
+  const openBulletinViewer = useCallback(async (issueId: number, pageNumber: number, bulletinTitle: string) => {
+    setBulletinViewerLoading(true)
+    try {
+      const res = await fetch(`/api/bulletin/pages?issueId=${issueId}`)
+      const data = await res.json()
+      if (data.success && data.pages.length > 0) {
+        const pageIdx = data.pages.findIndex((p: any) => p.page_number === pageNumber)
+        setBulletinViewer({
+          issueId,
+          pages: data.pages,
+          currentPage: pageIdx >= 0 ? pageIdx : 0,
+          bulletinTitle
+        })
+      }
+    } catch (err) {
+      console.error('주보 이미지 로드 실패:', err)
+    } finally {
+      setBulletinViewerLoading(false)
+    }
+  }, [])
+
   // 성경 버전 목록 로드 (100% 완료된 버전만, 최초 1회만 실행)
   useEffect(() => {
     fetch('/api/bible/versions')
@@ -404,17 +513,23 @@ export default function Home() {
     setLanguageByBibleVersion(versionId)
   }
 
-  // 자동 스크롤
+  // 자동 스크롤 (메시지가 있을 때만 - 초기 빈 화면에서 스크롤 방지)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
 
   useEffect(() => {
-    newsMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (newsMessages.length > 0) {
+      newsMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [newsMessages])
 
   useEffect(() => {
-    bulletinMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (bulletinMessages.length > 0) {
+      bulletinMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [bulletinMessages])
 
   // 성경 상담 제출
@@ -1105,7 +1220,7 @@ export default function Home() {
                       >
                         <div className="whitespace-pre-wrap leading-relaxed text-base">
                           {message.role === 'assistant'
-                            ? parseBibleReferences(message.content)
+                            ? formatMessage(message.content)
                             : message.content
                           }
                         </div>
@@ -1471,7 +1586,7 @@ export default function Home() {
                             {/* 응답 내용 */}
                             <div className="bg-white/95 border border-indigo-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
                               <div className="text-base text-gray-800 whitespace-pre-wrap leading-relaxed">
-                                {parseBibleReferences(message.content)}
+                                {formatMessage(message.content)}
                               </div>
                               {message.provider && (
                                 <div className="mt-2 pt-2 border-t border-indigo-50">
@@ -1513,7 +1628,7 @@ export default function Home() {
                     {newsLoading && !newsMessages.find(m => m.role === 'assistant' && m.content) && (
                       <div className="flex justify-start animate-fade-in">
                         <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-indigo-100/70">
-                          <PrayingHandsLoader />
+                          <PrayingHandsLoader message="기사를 찾고 있습니다..." iconClassName="w-6 h-6 text-indigo-600" textClassName="text-sm text-indigo-600 font-medium" />
                         </div>
                       </div>
                     )}
@@ -1626,21 +1741,31 @@ export default function Home() {
                           }`}
                         >
                           <div className="whitespace-pre-wrap leading-relaxed text-base">
-                            {message.content}
+                            {message.role === 'assistant'
+                              ? formatMessage(message.content)
+                              : message.content
+                            }
                           </div>
 
-                          {/* 출처 */}
+                          {/* 출처 - 클릭하면 이미지 뷰어 열기 */}
                           {message.sources && message.sources.length > 0 && (
                             <div className="mt-3 pt-2 border-t border-green-200/50">
                               <p className="text-xs text-green-600 mb-1.5 font-medium">참조 주보:</p>
                               <div className="space-y-1">
                                 {message.sources.slice(0, 3).map((source: any, idx: number) => (
-                                  <div
+                                  <button
                                     key={idx}
-                                    className="text-xs bg-green-50 text-green-800 rounded-lg px-2 py-1"
+                                    onClick={() => source.issueId && openBulletinViewer(source.issueId, source.pageNumber, source.bulletinTitle)}
+                                    className="flex items-center gap-1.5 w-full text-left text-xs bg-green-50 hover:bg-green-100 text-green-800 rounded-lg px-2 py-1.5 transition-colors cursor-pointer group"
                                   >
-                                    [{source.bulletinTitle}] {source.sectionType}
-                                  </div>
+                                    <svg className="w-3.5 h-3.5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <span className="flex-1">[{source.bulletinTitle}] {source.sectionType}</span>
+                                    <svg className="w-3 h-3 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </button>
                                 ))}
                               </div>
                             </div>
@@ -1653,7 +1778,82 @@ export default function Home() {
                     {bulletinLoading && !bulletinMessages.find(m => m.role === 'assistant' && m.content) && (
                       <div className="flex justify-start animate-fade-in">
                         <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-green-100/70">
-                          <PrayingHandsLoader />
+                          <PrayingHandsLoader message="주보 내용을 찾고 있습니다..." iconClassName="w-6 h-6 text-green-600" textClassName="text-sm text-green-600 font-medium" />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 주보 이미지 로딩 */}
+                    {bulletinViewerLoading && (
+                      <div className="flex justify-center animate-fade-in py-2">
+                        <div className="flex items-center gap-2 text-sm text-green-600">
+                          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          주보 이미지를 불러오는 중...
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 주보 인라인 이미지 뷰어 */}
+                    {bulletinViewer && (
+                      <div className="animate-fade-in">
+                        <div className="bg-white/95 rounded-2xl border border-green-200 shadow-sm overflow-hidden">
+                          {/* 뷰어 헤더 */}
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-b border-green-100">
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span className="text-sm font-medium text-green-800">{bulletinViewer.bulletinTitle}</span>
+                            </div>
+                            <button
+                              onClick={() => setBulletinViewer(null)}
+                              className="p-1 hover:bg-green-200/50 rounded-full transition-colors"
+                            >
+                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          {/* 이미지 */}
+                          <div className="relative bg-gray-50">
+                            <img
+                              src={bulletinViewer.pages[bulletinViewer.currentPage]?.image_url}
+                              alt={`${bulletinViewer.bulletinTitle} ${bulletinViewer.pages[bulletinViewer.currentPage]?.page_number}면`}
+                              className="w-full h-auto"
+                              loading="lazy"
+                            />
+                          </div>
+
+                          {/* 네비게이션 */}
+                          <div className="flex items-center justify-between px-4 py-2.5 bg-green-50 border-t border-green-100">
+                            <button
+                              onClick={() => setBulletinViewer(prev => prev ? { ...prev, currentPage: prev.currentPage - 1 } : null)}
+                              disabled={bulletinViewer.currentPage === 0}
+                              className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 rounded-full disabled:text-green-300 disabled:hover:bg-transparent transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                              </svg>
+                              이전면
+                            </button>
+                            <span className="text-sm font-medium text-green-700">
+                              {bulletinViewer.pages[bulletinViewer.currentPage]?.page_number}면 / {bulletinViewer.pages.length}면
+                            </span>
+                            <button
+                              onClick={() => setBulletinViewer(prev => prev ? { ...prev, currentPage: prev.currentPage + 1 } : null)}
+                              disabled={bulletinViewer.currentPage >= bulletinViewer.pages.length - 1}
+                              className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 rounded-full disabled:text-green-300 disabled:hover:bg-transparent transition-colors"
+                            >
+                              다음면
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
