@@ -81,6 +81,26 @@ const BULLETIN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> 
   { pattern: /여호와에서/g, replacement: '여호와께서' },
   { pattern: /법사에\s*감사/g, replacement: '범사에 감사' },
   { pattern: /가정에배/g, replacement: '가정예배' },
+
+  // VLM 빈번한 오독 (로그 분석 기반)
+  { pattern: /예창조나타/g, replacement: '예찬 소나타' },
+  { pattern: /예창조니단/g, replacement: '예찬 소나타' },
+  { pattern: /예찬코디남/g, replacement: '예찬 소나타' },
+  { pattern: /예찬코리남/g, replacement: '예찬 소나타' },
+  { pattern: /설증댄/g, replacement: '설교댄스' },
+  { pattern: /벤잔/g, replacement: '벤젠' },
+  { pattern: /절은부부교구/g, replacement: '젊은부부교구' },
+  { pattern: /젊은부부교구/g, replacement: '젊은부부교구' },
+  { pattern: /급수\s*새벽예배/g, replacement: '금요 새벽예배' },
+  { pattern: /돌례북가/g, replacement: '돌려복자' },
+  { pattern: /개인헌급려윰/g, replacement: '개인헌금내역' },
+  { pattern: /동행이연/g, replacement: '동행이웃' },
+  { pattern: /생명된/g, replacement: '생명의' },
+  { pattern: /업김성선/g, replacement: '엄김성선' },
+  { pattern: /총관한/g, replacement: '총괄한' },
+  { pattern: /채루팀/g, replacement: '찬양팀' },
+  { pattern: /용고\s*그늘/g, replacement: '용기의 그늘' },
+  { pattern: /C\.G\.N\s*밤문/g, replacement: 'CGN 방문' },
 ]
 
 /**
@@ -145,13 +165,23 @@ const BULLETIN_VLM_PROMPT = `이 이미지는 한국 교회의 주보(예배순�
 - JSON만 출력, 다른 설명 없이
 - 마크다운 기호(#, *, _, ~, \`)를 사용하지 말 것. 일반 텍스트로만 출력
 
-참고 - 이 교회에서 자주 등장하는 용어:
+참고 - 이 교회(안양제일교회)에서 자주 등장하는 용어:
 - 전도폭발(전폭): 전도 프로그램 (영어전폭 = 영어 전도폭발)
 - 원데이 워크샵: 전도폭발 집중 교육
 - 브릿지전도학교, 쿠티학교, 중보기도세미나: 양육 프로그램
-- 만나홀, 비전센터, 비전홀, 평강홀, 미스바: 교회 내 장소명
-- 전도회, 선교회, 권사회, 집사회: 교회 조직명
-- 위임목사, 부목사, 전도사: 직함`
+- 만나홀, 비전센터, 비전홀, 평강홀, 미스바, 이레홀: 교회 내 장소명
+- 전도회, 선교회, 권사회, 집사회, 젊은부부교구: 교회 조직명
+- 위임목사, 부목사, 전도사, 강도사: 직함
+- 예찬 소나타, 예찬 오케스트라, 예찬 코리아: 음악 사역 이름
+- CGN, 선교한국, 인터콥: 선교 관련 단체
+- 금요 새벽예배, 수요 예배, 주일 예배: 예배 일정
+- 다같이 (이 단어를 "다갈이"로 오독하지 말 것)
+
+⚠️ 중요한 오독 주의사항:
+- "예찬"을 "예창"으로, "소나타"를 "조나타"로 읽지 말 것
+- "젊은"을 "절은"으로 읽지 말 것
+- "찬양"을 "채루"로 읽지 말 것
+- 숫자 뒤의 원(①②③)은 그대로 표기`
 
 /**
  * VLM으로 주보 직접 구조화 추출
@@ -249,14 +279,24 @@ export async function extractBulletinWithVLM(
     }
   }
 
-  // JSON 파싱
+  // JSON 파싱 (마크다운 코드블록 제거 후 파싱)
   try {
-    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/)
+    // 마크다운 코드블록(```json ... ```) 제거
+    let cleanedResponse = rawResponse
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim()
+
+    const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       throw new Error('JSON not found in response')
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    let jsonStr = jsonMatch[0]
+    // 후행 쉼표 제거 (VLM이 가끔 생성)
+    jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1')
+
+    const parsed = JSON.parse(jsonStr)
     const allCorrections: string[] = []
 
     // 섹션 내용 교정

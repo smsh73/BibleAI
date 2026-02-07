@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '@/contexts/LanguageContext'
 
-const ADMIN_PASSWORD = '주님께영광25@@'
+const ADMIN_PASSWORD = 'wnslaRpdudrhkd25@@'
 const AUTH_KEY = 'bibleai_admin_auth'
 
 export default function ResponsiveNav() {

@@ -43,37 +43,20 @@ function getSupabase(): SupabaseClient {
   return _supabase
 }
 
+import { isStopRequested, updateProgress } from '@/app/api/admin/task-lock/route'
+
 /**
- * 중지 요청 확인
+ * 중지 요청 확인 (직접 메모리 참조 - HTTP self-fetch 제거)
  */
 async function checkStopRequested(): Promise<boolean> {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/task-lock`)
-    const data = await res.json()
-    return data.stopRequested === true
-  } catch {
-    return false
-  }
+  return isStopRequested()
 }
 
 /**
- * 진행 상태 업데이트 (task-lock에 현재 작업 정보 전송)
+ * 진행 상태 업데이트 (직접 메모리 참조 - HTTP self-fetch 제거)
  */
 async function updateTaskProgress(currentItem: string, processedCount: number, totalCount: number): Promise<void> {
-  try {
-    await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/admin/task-lock`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'progress',
-        currentItem,
-        processedCount,
-        totalCount
-      })
-    })
-  } catch {
-    // 실패해도 계속 진행
-  }
+  updateProgress(currentItem, processedCount, totalCount)
 }
 
 /**

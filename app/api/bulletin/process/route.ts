@@ -12,6 +12,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import { analyzeBulletinPage } from '@/lib/bulletin-ocr'
 import { validateOCRResult } from '@/lib/ocr-validator'
+import { isStopRequested, updateProgress } from '@/app/api/admin/task-lock/route'
 
 // Lazy initialization - runtime에서만 생성
 let _supabase: SupabaseClient | null = null
@@ -40,38 +41,17 @@ const BASE_URL = 'https://www.anyangjeil.org'
 const BOARD_ID = 65
 
 /**
- * 중지 요청 확인
+ * 중지 요청 확인 (직접 메모리 참조 - HTTP self-fetch 불필요)
  */
 async function checkStopRequested(): Promise<boolean> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const res = await fetch(`${baseUrl}/api/admin/task-lock`)
-    const data = await res.json()
-    return data.stopRequested === true
-  } catch {
-    return false
-  }
+  return isStopRequested()
 }
 
 /**
- * 진행 상태 업데이트 (task-lock에 현재 작업 정보 전송)
+ * 진행 상태 업데이트 (직접 메모리 참조 - HTTP self-fetch 불필요)
  */
 async function updateTaskProgress(currentItem: string, processedCount: number, totalCount: number): Promise<void> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    await fetch(`${baseUrl}/api/admin/task-lock`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'progress',
-        currentItem,
-        processedCount,
-        totalCount
-      })
-    })
-  } catch {
-    // 실패해도 계속 진행
-  }
+  updateProgress(currentItem, processedCount, totalCount)
 }
 
 /**
@@ -474,33 +454,37 @@ export async function GET() {
   }
 }
 
-// Task lock 획득 헬퍼
+// Task lock 획득 헬퍼 (직접 API 호출 - self-fetch 제거)
 async function acquireTaskLock(description: string): Promise<{ success: boolean; message?: string }> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const response = await fetch(`${baseUrl}/api/admin/task-lock`, {
+    // task-lock API를 내부적으로 직접 호출
+    const { POST: taskLockPost } = await import('@/app/api/admin/task-lock/route')
+    const fakeReq = new Request('http://localhost/api/admin/task-lock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskType: 'bulletin', description })
-    })
+    }) as unknown as NextRequest
+    const response = await taskLockPost(fakeReq)
     const data = await response.json()
-    if (!response.ok) {
+
+    if (response.status === 409) {
       return { success: false, message: data.message || '다른 작업이 진행 중입니다.' }
     }
-    return { success: true }
+    return { success: data.success !== false }
   } catch (error) {
     console.warn('Task lock 획득 실패 (계속 진행):', error)
-    return { success: true } // 락 서비스 에러 시 계속 진행
+    return { success: true }
   }
 }
 
-// Task lock 해제 헬퍼
+// Task lock 해제 헬퍼 (직접 API 호출 - self-fetch 제거)
 async function releaseTaskLock(): Promise<void> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    await fetch(`${baseUrl}/api/admin/task-lock?taskType=bulletin`, {
+    const { DELETE: taskLockDelete } = await import('@/app/api/admin/task-lock/route')
+    const fakeReq = new Request('http://localhost/api/admin/task-lock?taskType=bulletin', {
       method: 'DELETE'
-    })
+    }) as unknown as NextRequest
+    await taskLockDelete(fakeReq)
   } catch (error) {
     console.warn('Task lock 해제 실패:', error)
   }

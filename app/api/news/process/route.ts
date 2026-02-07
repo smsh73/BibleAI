@@ -509,33 +509,36 @@ async function processIssue(
   }
 }
 
-// Task lock 획득 헬퍼
+// Task lock 획득 헬퍼 (직접 API 호출 - self-fetch 제거)
 async function acquireTaskLock(description: string): Promise<{ success: boolean; message?: string }> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    const response = await fetch(`${baseUrl}/api/admin/task-lock`, {
+    const { POST: taskLockPost } = await import('@/app/api/admin/task-lock/route')
+    const fakeReq = new Request('http://localhost/api/admin/task-lock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskType: 'news', description })
-    })
+    }) as unknown as NextRequest
+    const response = await taskLockPost(fakeReq)
     const data = await response.json()
-    if (!response.ok) {
+
+    if (response.status === 409) {
       return { success: false, message: data.message || '다른 작업이 진행 중입니다.' }
     }
-    return { success: true }
+    return { success: data.success !== false }
   } catch (error) {
     console.warn('Task lock 획득 실패 (계속 진행):', error)
-    return { success: true } // 락 서비스 에러 시 계속 진행
+    return { success: true }
   }
 }
 
-// Task lock 해제 헬퍼
+// Task lock 해제 헬퍼 (직접 API 호출 - self-fetch 제거)
 async function releaseTaskLock(): Promise<void> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    await fetch(`${baseUrl}/api/admin/task-lock?taskType=news`, {
+    const { DELETE: taskLockDelete } = await import('@/app/api/admin/task-lock/route')
+    const fakeReq = new Request('http://localhost/api/admin/task-lock?taskType=news', {
       method: 'DELETE'
-    })
+    }) as unknown as NextRequest
+    await taskLockDelete(fakeReq)
   } catch (error) {
     console.warn('Task lock 해제 실패:', error)
   }
