@@ -947,37 +947,52 @@ export default function Home() {
                 </svg>
               </div>
 
-              {/* 중앙: 토글 스위치 탭 */}
+              {/* 중앙: 토글 스위치 탭 - 모바일에서는 아이콘, 데스크톱에서는 텍스트 */}
               <div className="flex items-center bg-gray-100 rounded-full p-1">
                 <button
                   onClick={() => setActiveTab('bible')}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  className={`px-2 sm:px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
                     activeTab === 'bible'
                       ? 'bg-white text-amber-700 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
+                  title={language === 'en' ? 'Bible Counseling' : '성경 상담'}
                 >
-                  {language === 'en' ? 'Bible' : '성경 상담'}
+                  {/* 성경 아이콘 */}
+                  <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span className="hidden sm:inline">{language === 'en' ? 'Bible' : '성경 상담'}</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('news')}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  className={`px-2 sm:px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
                     activeTab === 'news'
                       ? 'bg-white text-indigo-700 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
+                  title={language === 'en' ? 'News' : '열한시'}
                 >
-                  {language === 'en' ? 'News' : '열한시'}
+                  {/* 신문 아이콘 */}
+                  <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+                  </svg>
+                  <span className="hidden sm:inline">{language === 'en' ? 'News' : '열한시'}</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('bulletin')}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  className={`px-2 sm:px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center gap-1.5 ${
                     activeTab === 'bulletin'
                       ? 'bg-white text-green-700 shadow-sm'
                       : 'text-gray-500 hover:text-gray-700'
                   }`}
+                  title={language === 'en' ? 'Bulletin' : '주보'}
                 >
-                  {language === 'en' ? 'Bulletin' : '주보'}
+                  {/* 주보/문서 아이콘 */}
+                  <svg className="w-4 h-4 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">{language === 'en' ? 'Bulletin' : '주보'}</span>
                 </button>
               </div>
 
@@ -1381,45 +1396,43 @@ export default function Home() {
         {/* =============== 뉴스 AI 탭 =============== */}
         {activeTab === 'news' && (
           <>
-            {/* 필터 바 - 성경 버전 선택과 동일한 스타일 */}
-            {newsMessages.length === 0 && (
-              <div className="flex-shrink-0 px-4 py-1">
-                <div className="max-w-4xl mx-auto">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-indigo-700 font-medium">{t('news.yearLabel')}</span>
-                    <select
-                      value={yearFilter || ''}
-                      onChange={(e) => setYearFilter(e.target.value ? parseInt(e.target.value) : undefined)}
-                      className="px-2 py-0.5 bg-white/80 border border-indigo-200 rounded text-indigo-800 text-sm focus:outline-none focus:border-indigo-400 cursor-pointer"
-                    >
-                      <option value="">{t('news.allYears')}</option>
-                      {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map(year => (
-                        <option key={year} value={year}>{year}{language === 'ko' ? '년' : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 채팅 영역 */}
+            {/* 메시지 목록 */}
             <div className="flex-1 overflow-y-auto px-4 py-4">
-              <div className="max-w-4xl mx-auto">
+              <div className="max-w-4xl mx-auto space-y-4">
                 {newsMessages.length === 0 ? (
                   /* 초기 화면 - 성경 상담 탭과 동일한 스타일 */
-                  <div className="text-center pt-20 pb-8 animate-fade-in">
-                    <p className="text-indigo-900 text-xl font-semibold mb-2">{t('news.title')}</p>
-                    <p className="text-indigo-700 text-base mb-8">{t('news.greeting')}</p>
+                  <div className="flex flex-col items-center pt-8 pb-8 animate-fade-in">
+                    {/* 타이틀 */}
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('news.title')}</h2>
 
-                    {/* 추천 질문 - 본문은 한국어 유지 */}
-                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-base">
+                    {/* 연도 필터 - 토글 스타일 */}
+                    <div className="flex items-center gap-2 mb-4 bg-white/80 rounded-full px-3 py-1.5 shadow-sm border border-gray-100">
+                      <span className="text-indigo-600 text-sm font-medium">{t('news.yearLabel')}</span>
+                      <select
+                        value={yearFilter || ''}
+                        onChange={(e) => setYearFilter(e.target.value ? parseInt(e.target.value) : undefined)}
+                        className="bg-transparent text-indigo-700 text-sm font-medium focus:outline-none cursor-pointer"
+                      >
+                        <option value="">{t('news.allYears')}</option>
+                        {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map(year => (
+                          <option key={year} value={year}>{year}{language === 'ko' ? '년' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 제안 버튼 - 필 스타일 + 화살표 */}
+                    <div className="flex flex-col items-start gap-2 w-full max-w-sm mt-4">
                       {newsSuggestions.map((suggestion, idx) => (
                         <button
                           key={idx}
                           onClick={() => setNewsInput(suggestion)}
-                          className="text-indigo-700 hover:text-indigo-900 hover:underline underline-offset-2 transition-colors font-medium"
+                          className="flex items-center justify-between w-full px-5 py-3 bg-white/90 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-300 rounded-full text-left text-gray-800 font-medium transition-all shadow-sm hover:shadow group"
+                          style={{ animationDelay: `${idx * 0.05}s` }}
                         >
-                          {suggestion}
+                          <span>{suggestion}</span>
+                          <svg className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
                         </button>
                       ))}
                     </div>
@@ -1482,14 +1495,11 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* 로딩 표시 - 기도손 애니메이션 */}
+                    {/* 로딩 - 기도손 애니메이션 */}
                     {newsLoading && !newsMessages.find(m => m.role === 'assistant' && m.content) && (
                       <div className="flex justify-start animate-fade-in">
-                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-rose-100/70">
-                          <div className="flex items-center gap-3">
-                            <PrayingHandsIcon className="w-6 h-6 text-rose-500" />
-                            <WaveText text="기사를 찾고 있습니다..." className="text-sm text-rose-500 font-medium" />
-                          </div>
+                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-indigo-100/70">
+                          <PrayingHandsLoader />
                         </div>
                       </div>
                     )}
@@ -1501,33 +1511,55 @@ export default function Home() {
             </div>
 
             {/* 입력 영역 - 성경 탭과 동일한 스타일 */}
-            <div className="flex-shrink-0 px-4 py-3 bg-white/50">
+            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100">
               <form onSubmit={handleNewsSubmit} className="max-w-4xl mx-auto">
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    value={newsInput}
-                    onChange={(e) => setNewsInput(e.target.value)}
-                    placeholder={t('news.inputPlaceholder')}
-                    className="flex-1 px-4 py-3 bg-white border border-indigo-300 rounded-full focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-gray-900 placeholder-indigo-500 text-base"
-                    disabled={newsLoading}
-                  />
-                  <button
-                    type="submit"
-                    disabled={newsLoading || !newsInput.trim()}
-                    className="w-10 h-10 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-full disabled:bg-indigo-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {newsLoading ? (
-                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1 flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100">
+                    <div className="w-6 h-6 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center mr-3">
+                      <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
                       </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
-                      </svg>
-                    )}
-                  </button>
+                    </div>
+                    <textarea
+                      value={newsInput}
+                      onChange={(e) => setNewsInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          if (newsInput.trim() && !newsLoading) {
+                            handleNewsSubmit(e)
+                          }
+                        }
+                      }}
+                      placeholder={t('news.inputPlaceholder')}
+                      className="flex-1 bg-transparent focus:outline-none text-gray-900 placeholder-gray-400 text-base resize-none min-h-[24px] max-h-[80px]"
+                      disabled={newsLoading}
+                      rows={1}
+                      style={{ height: 'auto', overflow: 'hidden' }}
+                      ref={(el) => {
+                        if (el) {
+                          el.style.height = 'auto'
+                          el.style.height = Math.min(el.scrollHeight, 80) + 'px'
+                        }
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={newsLoading || !newsInput.trim()}
+                      className="w-8 h-8 flex items-center justify-center bg-indigo-500 hover:bg-indigo-600 text-white rounded-full disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors ml-2"
+                    >
+                      {newsLoading ? (
+                        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -1537,54 +1569,61 @@ export default function Home() {
         {/* =============== 주보 AI 탭 =============== */}
         {activeTab === 'bulletin' && (
           <>
-            {/* 채팅 영역 */}
-            <div className="flex-1 overflow-y-auto px-4 py-3">
-              <div className="max-w-4xl mx-auto">
+            {/* 메시지 목록 */}
+            <div className="flex-1 overflow-y-auto px-4 py-4">
+              <div className="max-w-4xl mx-auto space-y-4">
                 {bulletinMessages.length === 0 ? (
-                  /* 초기 화면 */
-                  <div className="flex flex-col items-center justify-center h-full min-h-[50vh] animate-fade-in">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-2">{t('bulletin.title')}</h2>
-                    <p className="text-gray-600 text-sm mb-6">{t('bulletin.greeting')}</p>
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {bulletinSuggestions.map((suggestion) => (
+                  /* 초기 화면 - 성경 상담 탭과 동일한 스타일 */
+                  <div className="flex flex-col items-center pt-8 pb-8 animate-fade-in">
+                    {/* 타이틀 */}
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6">{t('bulletin.title')}</h2>
+
+                    {/* 제안 버튼 - 필 스타일 + 화살표 */}
+                    <div className="flex flex-col items-start gap-2 w-full max-w-sm mt-4">
+                      {bulletinSuggestions.map((suggestion, idx) => (
                         <button
                           key={suggestion}
                           onClick={() => setBulletinInput(suggestion)}
-                          className="px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm hover:bg-green-200 transition-colors"
+                          className="flex items-center justify-between w-full px-5 py-3 bg-white/90 hover:bg-green-50 border border-gray-200 hover:border-green-300 rounded-full text-left text-gray-800 font-medium transition-all shadow-sm hover:shadow group"
+                          style={{ animationDelay: `${idx * 0.05}s` }}
                         >
-                          {suggestion}
+                          <span>{suggestion}</span>
+                          <svg className="w-4 h-4 text-gray-400 group-hover:text-green-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
                         </button>
                       ))}
                     </div>
                   </div>
                 ) : (
                   /* 채팅 메시지 */
-                  <div className="space-y-4 pb-4">
-                    {bulletinMessages.map((message) => (
+                  <div className="space-y-4">
+                    {bulletinMessages.map((message, idx) => (
                       <div
                         key={message.id}
                         className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}
+                        style={{ animationDelay: `${idx * 0.03}s` }}
                       >
                         <div
-                          className={`max-w-[85%] ${
+                          className={`max-w-[85%] px-4 py-3 ${
                             message.role === 'user'
-                              ? 'bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-2xl rounded-br-sm px-4 py-2.5 shadow-sm'
-                              : 'bg-white border border-green-100 shadow-sm text-gray-900 rounded-2xl rounded-bl-sm px-4 py-3'
+                              ? 'bg-green-500 text-white rounded-2xl rounded-br-sm'
+                              : 'bg-white/95 text-gray-800 rounded-2xl rounded-bl-sm shadow-sm border border-green-100/70'
                           }`}
                         >
-                          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                          <div className="whitespace-pre-wrap leading-relaxed text-base">
                             {message.content}
                           </div>
 
                           {/* 출처 */}
                           {message.sources && message.sources.length > 0 && (
-                            <div className="mt-3 pt-2 border-t border-green-200">
-                              <p className="text-xs text-green-600 mb-1.5">참조 주보:</p>
+                            <div className="mt-3 pt-2 border-t border-green-200/50">
+                              <p className="text-xs text-green-600 mb-1.5 font-medium">참조 주보:</p>
                               <div className="space-y-1">
                                 {message.sources.slice(0, 3).map((source: any, idx: number) => (
                                   <div
                                     key={idx}
-                                    className="text-xs bg-green-50 text-green-800 rounded px-2 py-1"
+                                    className="text-xs bg-green-50 text-green-800 rounded-lg px-2 py-1"
                                   >
                                     [{source.bulletinTitle}] {source.sectionType}
                                   </div>
@@ -1596,13 +1635,11 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {bulletinLoading && (
-                      <div className="flex justify-start animate-slide-up">
-                        <div className="bg-white border border-green-100 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">📖</span>
-                            <span className="text-sm text-green-600">주보를 찾고 있습니다...</span>
-                          </div>
+                    {/* 로딩 - 기도손 애니메이션 */}
+                    {bulletinLoading && !bulletinMessages.find(m => m.role === 'assistant' && m.content) && (
+                      <div className="flex justify-start animate-fade-in">
+                        <div className="bg-white/95 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm border border-green-100/70">
+                          <PrayingHandsLoader />
                         </div>
                       </div>
                     )}
@@ -1613,34 +1650,56 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 입력 영역 */}
-            <div className="flex-shrink-0 border-t border-green-100 bg-gradient-to-t from-green-50 to-white px-4 py-3">
+            {/* 입력 영역 - 성경 탭과 동일한 스타일 */}
+            <div className="flex-shrink-0 px-4 py-3 bg-white/80 backdrop-blur-sm border-t border-gray-100">
               <form onSubmit={handleBulletinSubmit} className="max-w-4xl mx-auto">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={bulletinInput}
-                    onChange={(e) => setBulletinInput(e.target.value)}
-                    placeholder={t('bulletin.inputPlaceholder')}
-                    className="flex-1 px-4 py-3 bg-white border border-green-300 rounded-full focus:outline-none focus:border-green-500 focus:ring-2 focus:ring-green-200 text-gray-900 placeholder-green-500 text-base"
-                    disabled={bulletinLoading}
-                  />
-                  <button
-                    type="submit"
-                    disabled={bulletinLoading || !bulletinInput.trim()}
-                    className="w-10 h-10 flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-full disabled:bg-green-300 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {bulletinLoading ? (
-                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1 flex items-center bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm focus-within:border-green-300 focus-within:ring-2 focus-within:ring-green-100">
+                    <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mr-3">
+                      <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
-                      </svg>
-                    )}
-                  </button>
+                    </div>
+                    <textarea
+                      value={bulletinInput}
+                      onChange={(e) => setBulletinInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          if (bulletinInput.trim() && !bulletinLoading) {
+                            handleBulletinSubmit(e)
+                          }
+                        }
+                      }}
+                      placeholder={t('bulletin.inputPlaceholder')}
+                      className="flex-1 bg-transparent focus:outline-none text-gray-900 placeholder-gray-400 text-base resize-none min-h-[24px] max-h-[80px]"
+                      disabled={bulletinLoading}
+                      rows={1}
+                      style={{ height: 'auto', overflow: 'hidden' }}
+                      ref={(el) => {
+                        if (el) {
+                          el.style.height = 'auto'
+                          el.style.height = Math.min(el.scrollHeight, 80) + 'px'
+                        }
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={bulletinLoading || !bulletinInput.trim()}
+                      className="w-8 h-8 flex items-center justify-center bg-green-500 hover:bg-green-600 text-white rounded-full disabled:bg-gray-200 disabled:cursor-not-allowed transition-colors ml-2"
+                    >
+                      {bulletinLoading ? (
+                        <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>

@@ -21,12 +21,15 @@ import {
   chunkText,
   createBatchEmbeddings,
   generateFileHash,
-  processImageToArticlesAdvanced
+  processImageToArticlesAdvanced,
+  extractStructuredWithVLM
 } from '@/lib/news-extractor'
 import { validateOCRResult } from '@/lib/ocr-validator'
 
 // 개선된 OCR 사용 여부 (환경변수로 제어, 기본값: true)
 const USE_ADVANCED_OCR = process.env.USE_ADVANCED_NEWS_OCR !== 'false'
+// VLM 직접 추출 사용 여부 (환경변수로 제어, 기본값: true - 기존 OCR보다 정확)
+const USE_VLM_EXTRACTION = process.env.USE_VLM_NEWS_EXTRACTION !== 'false'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -453,7 +456,8 @@ async function downloadImage(imageUrl: string): Promise<Buffer> {
 export async function POST(req: NextRequest) {
   // maxIssues 기본값 0 = 제한 없음 (모든 미처리 호수 처리)
   // fullRescan: true면 기존 스캔 정보 무시하고 전체 재스캔
-  const { action, issueNumber, maxIssues = 0, fullRescan = false, config = {} } = await req.json()
+  // useVLM: VLM 직접 구조화 추출 사용 여부 (기본값: 환경변수 또는 true)
+  const { action, issueNumber, maxIssues = 0, fullRescan = false, config = {}, useVLM = USE_VLM_EXTRACTION } = await req.json()
 
   // URL 설정 추출 (유연한 방식 + 레거시 호환)
   const urlConfig: UrlConfig = {
@@ -620,21 +624,48 @@ export async function POST(req: NextRequest) {
                 // 이미지 다운로드
                 const imageBuffer = await downloadImage(issue.imageUrls[p])
 
+                const ocrMode = useVLM ? 'VLM 직접 구조화 추출' : (USE_ADVANCED_OCR ? '고급 OCR (다단/연속기사/검증)' : 'OpenAI/Gemini/Claude OCR')
                 send({
                   type: 'progress',
                   step: 'ocr',
-                  message: `${issue.issueDate} - ${pageNumber}면 OCR 처리`,
+                  message: `${issue.issueDate} - ${pageNumber}면 텍스트 추출`,
                   percent: pagePercent + 2,
-                  detail: USE_ADVANCED_OCR ? '고급 OCR (다단/연속기사/검증) 진행 중...' : 'OpenAI/Gemini/Claude OCR 진행 중...'
+                  detail: `${ocrMode} 진행 중...`
                 })
 
-                // OCR (개선된 버전 또는 기본 버전)
+                // VLM 직접 추출, 개선된 OCR, 또는 기본 OCR 선택
                 let ocrText: string
                 let provider: string
                 let ocrConfidence = 1.0
                 let ocrWarnings: string[] = []
+                let vlmArticles: Array<{ title: string; content: string; type: string; author?: string }> = []
+                let vlmCorrections: string[] = []
 
-                if (USE_ADVANCED_OCR) {
+                if (useVLM) {
+                  // VLM 직접 구조화 추출 (기사 단위로 직접 분리)
+                  const vlmResult = await extractStructuredWithVLM(imageBuffer, 'image/jpeg')
+
+                  if (vlmResult.success) {
+                    vlmArticles = vlmResult.data.articles
+                    vlmCorrections = vlmResult.corrections
+                    provider = `VLM-${vlmResult.provider}`
+
+                    // OCR 텍스트 조합 (저장용)
+                    ocrText = vlmResult.data.articles
+                      .map(a => `### ${a.title}\n유형: ${a.type}\n${a.content}`)
+                      .join('\n\n---\n\n')
+
+                    if (vlmCorrections.length > 0) {
+                      console.log(`[VLM] 페이지 ${pageNumber} 교정: ${vlmCorrections.join(', ')}`)
+                    }
+                  } else {
+                    // VLM 실패 시 기존 OCR로 폴백
+                    console.log(`[VLM] 페이지 ${pageNumber} VLM 실패, 기존 OCR로 폴백`)
+                    const result = await performOCR(imageBuffer)
+                    ocrText = result.text
+                    provider = `${result.provider} (VLM 폴백)`
+                  }
+                } else if (USE_ADVANCED_OCR) {
                   // 개선된 OCR: 다단 레이아웃, 연속 기사, 고유명사 검증
                   const basicOcr = await performOCR(imageBuffer)
                   const validation = await validateOCRResult(basicOcr.text)
@@ -653,14 +684,18 @@ export async function POST(req: NextRequest) {
                   provider = result.provider
                 }
 
+                const detailMsg = useVLM
+                  ? `${vlmArticles.length}개 기사 직접 추출${vlmCorrections.length > 0 ? `, 교정 ${vlmCorrections.length}건` : ''}`
+                  : USE_ADVANCED_OCR
+                    ? `${ocrText.length}자 추출, 신뢰도 ${(ocrConfidence * 100).toFixed(0)}%${ocrWarnings.length > 0 ? `, 경고 ${ocrWarnings.length}개` : ''}`
+                    : `${ocrText.length}자 추출`
+
                 send({
                   type: 'progress',
                   step: 'ocr_done',
-                  message: `${issue.issueDate} - ${pageNumber}면 OCR 완료 (${provider})`,
+                  message: `${issue.issueDate} - ${pageNumber}면 추출 완료 (${provider})`,
                   percent: pagePercent + 5,
-                  detail: USE_ADVANCED_OCR
-                    ? `${ocrText.length}자 추출, 신뢰도 ${(ocrConfidence * 100).toFixed(0)}%${ocrWarnings.length > 0 ? `, 경고 ${ocrWarnings.length}개` : ''}`
-                    : `${ocrText.length}자 추출`
+                  detail: detailMsg
                 })
 
                 // 페이지 저장
@@ -674,31 +709,67 @@ export async function POST(req: NextRequest) {
                   status: 'completed'
                 })
 
-                // 기사 분리
-                const articles = splitArticles(ocrText)
+                // 기사 분리 (VLM은 이미 분리됨)
+                let articles: Array<{ title: string; content: string; type?: string; author?: string }> = []
+
+                if (useVLM && vlmArticles.length > 0) {
+                  // VLM 결과 사용 (이미 구조화됨)
+                  articles = vlmArticles.map(a => ({
+                    title: a.title,
+                    content: a.content,
+                    type: a.type,
+                    author: a.author
+                  }))
+                } else {
+                  // 기존 방식: OCR 텍스트에서 기사 분리
+                  const splitResult = splitArticles(ocrText)
+                  articles = splitResult.map(text => ({ title: '', content: text }))
+                }
 
                 send({
                   type: 'progress',
                   step: 'articles',
                   message: `${issue.issueDate} - ${pageNumber}면 기사 추출`,
                   percent: pagePercent + 7,
-                  detail: `${articles.length}개 기사 발견`
+                  detail: `${articles.length}개 기사 발견${useVLM ? ' (VLM 구조화)' : ''}`
                 })
 
                 // 각 기사 처리
                 for (let a = 0; a < articles.length; a++) {
-                  const articleText = articles[a]
+                  const article = articles[a]
 
                   send({
                     type: 'progress',
                     step: 'metadata',
                     message: `${issue.issueDate} - ${pageNumber}면 기사 ${a + 1}/${articles.length}`,
                     percent: pagePercent + 8,
-                    detail: '메타데이터 추출 중...'
+                    detail: useVLM ? '기사 저장 중...' : '메타데이터 추출 중...'
                   })
 
-                  // 메타데이터 추출
-                  const metadata = await extractMetadata(articleText)
+                  // 메타데이터 (VLM은 이미 추출됨, 기존 OCR은 별도 추출)
+                  let metadata: {
+                    title: string
+                    content: string
+                    article_type?: string
+                    speaker?: string
+                    event_name?: string
+                    event_date?: string
+                    bible_references?: string[]
+                    keywords?: string[]
+                  }
+
+                  if (useVLM && article.title) {
+                    // VLM 결과 사용 (이미 구조화됨)
+                    metadata = {
+                      title: article.title,
+                      content: article.content,
+                      article_type: article.type,
+                      speaker: article.author
+                    }
+                  } else {
+                    // 기존 방식: 별도 메타데이터 추출
+                    metadata = await extractMetadata(article.content)
+                  }
 
                   // 기사 저장
                   const articleId = await saveNewsArticle({

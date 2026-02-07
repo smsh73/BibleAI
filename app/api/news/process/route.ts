@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import {
   performOCR,
   processImageToArticles,
+  processImageWithVLM,
   saveNewsIssue,
   updateIssueStatus,
   isIssueProcessed
@@ -410,13 +411,17 @@ async function downloadImage(imageUrl: string): Promise<Buffer> {
 
 /**
  * 단일 호수 처리
+ * @param useVLM - VLM 직접 구조화 추출 사용 여부 (기본값: true, 더 정확한 한국어 인식)
  */
 async function processIssue(
   issueInfo: IssueInfo,
-  onProgress?: (message: string) => void
-): Promise<{ success: boolean; articles: number; chunks: number; error?: string }> {
+  onProgress?: (message: string) => void,
+  useVLM: boolean = true  // 기본값을 VLM으로 변경
+): Promise<{ success: boolean; articles: number; chunks: number; provider?: string; corrections?: string[]; error?: string }> {
   let totalArticles = 0
   let totalChunks = 0
+  let provider = 'OCR'
+  const allCorrections: string[] = []
 
   try {
     // 이미 처리된 호수인지 확인
@@ -425,7 +430,7 @@ async function processIssue(
       return { success: true, articles: 0, chunks: 0 }
     }
 
-    onProgress?.(`${issueInfo.issueDate} 처리 시작...`)
+    onProgress?.(`${issueInfo.issueDate} 처리 시작... (${useVLM ? 'VLM 직접 추출' : '기존 OCR'})`)
 
     // 이슈 저장
     const issueId = await saveNewsIssue({
@@ -448,19 +453,34 @@ async function processIssue(
         // 이미지 다운로드
         const imageBuffer = await downloadImage(issueInfo.imageUrls[i])
 
-        // 처리
-        const result = await processImageToArticles(
-          imageBuffer,
-          issueId,
-          issueInfo.issueNumber,
-          issueInfo.issueDate,
-          pageNumber,
-          'image/jpeg',
-          onProgress
-        )
-
-        totalArticles += result.articles
-        totalChunks += result.chunks
+        // VLM 또는 기존 OCR 선택
+        if (useVLM) {
+          const result = await processImageWithVLM(
+            imageBuffer,
+            issueId,
+            issueInfo.issueNumber,
+            issueInfo.issueDate,
+            pageNumber,
+            'image/jpeg',
+            onProgress
+          )
+          totalArticles += result.articles
+          totalChunks += result.chunks
+          provider = result.provider
+          allCorrections.push(...result.corrections)
+        } else {
+          const result = await processImageToArticles(
+            imageBuffer,
+            issueId,
+            issueInfo.issueNumber,
+            issueInfo.issueDate,
+            pageNumber,
+            'image/jpeg',
+            onProgress
+          )
+          totalArticles += result.articles
+          totalChunks += result.chunks
+        }
       } catch (pageError: any) {
         console.error(`페이지 ${pageNumber} 처리 실패:`, pageError)
       }
@@ -473,9 +493,10 @@ async function processIssue(
     // 이렇게 하면 처리 중에도 챗봇에서 검색 가능
     await syncVectorIndex()
 
-    onProgress?.(`${issueInfo.issueDate} 완료: ${totalArticles}개 기사, ${totalChunks}개 청크 (벡터 인덱스 동기화됨)`)
+    const correctionSummary = allCorrections.length > 0 ? ` (교정: ${allCorrections.length}건)` : ''
+    onProgress?.(`${issueInfo.issueDate} 완료: ${totalArticles}개 기사, ${totalChunks}개 청크${correctionSummary} (벡터 인덱스 동기화됨)`)
 
-    return { success: true, articles: totalArticles, chunks: totalChunks }
+    return { success: true, articles: totalArticles, chunks: totalChunks, provider, corrections: allCorrections }
   } catch (error: any) {
     console.error(`${issueInfo.issueDate} 처리 실패:`, error)
     return { success: false, articles: totalArticles, chunks: totalChunks, error: error.message }
@@ -538,7 +559,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     // maxIssues 기본값 0 = 제한 없음 (모든 미처리 호수 처리)
-    const { action, config, issueNumber, maxIssues = 0 } = body
+    // useVLM 기본값 true = VLM 직접 구조화 추출 사용 (더 정확한 한국어 인식)
+    const { action, config, issueNumber, maxIssues = 0, useVLM = true } = body
 
     // ============ 스캔: 전체 호수 목록 수집 ============
     if (action === 'scan') {
@@ -619,7 +641,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: '호수를 찾을 수 없습니다. 먼저 스캔을 실행하세요.' }, { status: 404 })
         }
 
-        const result = await processIssue(issueInfo)
+        const result = await processIssue(issueInfo, undefined, useVLM)
         await releaseTaskLock()
 
         return NextResponse.json({
@@ -629,6 +651,8 @@ export async function POST(req: NextRequest) {
           issueDate: issueInfo.issueDate,
           articles: result.articles,
           chunks: result.chunks,
+          provider: result.provider,
+          corrections: result.corrections,
           error: result.error
         })
       } catch (error) {
@@ -682,10 +706,10 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        // 처리
+        // 처리 (VLM 사용 여부 전달)
         const results = []
         for (const issue of pendingIssues) {
-          const result = await processIssue(issue)
+          const result = await processIssue(issue, undefined, useVLM)
           results.push({
             issueNumber: issue.issueNumber,
             issueDate: issue.issueDate,
@@ -696,6 +720,7 @@ export async function POST(req: NextRequest) {
         const successCount = results.filter(r => r.success).length
         const totalArticles = results.reduce((sum, r) => sum + r.articles, 0)
         const totalChunks = results.reduce((sum, r) => sum + r.chunks, 0)
+        const totalCorrections = results.reduce((sum, r) => sum + (r.corrections?.length || 0), 0)
 
         await releaseTaskLock()
 
@@ -706,6 +731,8 @@ export async function POST(req: NextRequest) {
           failed: results.length - successCount,
           totalArticles,
           totalChunks,
+          totalCorrections,
+          useVLM,
           results
         })
       } catch (error) {

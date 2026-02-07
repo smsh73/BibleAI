@@ -52,6 +52,279 @@ async function getGenAI(): Promise<GoogleGenerativeAI> {
   return genAI
 }
 
+// ============ 알려진 OCR 오류 교정 패턴 (주보 전용) ============
+
+const BULLETIN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> = [
+  // 교회명 오류
+  { pattern: /안양제일/g, replacement: '안양제일교회' },
+  { pattern: /안양제일교회교회/g, replacement: '안양제일교회' },
+
+  // 직함 오류
+  { pattern: /위원목사/g, replacement: '위임목사' },
+  { pattern: /우임목사/g, replacement: '위임목사' },
+  { pattern: /전도샤/g, replacement: '전도사' },
+
+  // 장소명 오류
+  { pattern: /한나홀/g, replacement: '만나홀' },
+  { pattern: /만나를/g, replacement: '만나홀' },
+  { pattern: /비전젤/g, replacement: '비전센터' },
+
+  // 행사명 오류
+  { pattern: /예배순서지/g, replacement: '예배순서' },
+]
+
+/**
+ * 알려진 OCR 오류 패턴을 교정 (주보 전용)
+ */
+function applyBulletinCorrections(text: string): { correctedText: string; corrections: string[] } {
+  let correctedText = text
+  const corrections: string[] = []
+
+  for (const { pattern, replacement } of BULLETIN_OCR_CORRECTIONS) {
+    const matches = correctedText.match(pattern)
+    if (matches) {
+      corrections.push(`${matches[0]} → ${replacement}`)
+      correctedText = correctedText.replace(pattern, replacement)
+    }
+  }
+
+  return { correctedText, corrections }
+}
+
+// ============ VLM 직접 구조화 추출 (주보 전용) ============
+
+/**
+ * VLM 직접 구조화 추출 프롬프트 (주보 전용)
+ * 열한시 추출과 별도로 주보 특성에 맞게 최적화
+ */
+const BULLETIN_VLM_PROMPT = `이 이미지는 한국 교회의 주보(예배순서지) 한 페이지입니다.
+
+⚠️ 정확성 최우선 규칙:
+1. 이름, 직분, 숫자는 이미지에 보이는 그대로 정확히 읽기
+2. 추측하지 말고, 불확실하면 [?]로 표시
+3. 없는 내용을 만들어내지 말 것 (할루시네이션 금지)
+4. 한글 초성 구분 주의: ㅁ/ㅎ, ㄴ/ㄹ, ㅇ/ㅁ
+
+이미지의 모든 내용을 분석하여 다음 JSON 형식으로 출력:
+
+{
+  "page_type": "worship_order | church_news | prayer_requests | announcements | mixed",
+  "sections": [
+    {
+      "type": "예배순서 | 교회소식 | 기도제목 | 광고 | 새가족 | 헌금 | 봉사자 | 교회학교 | 감사 | 추모 | 기타",
+      "title": "섹션 제목 (정확히)",
+      "content": "본문 내용 (정확히, 줄바꿈 유지)",
+      "items": [
+        {"label": "항목명", "value": "값 (이름, 숫자 등 정확히)"}
+      ]
+    }
+  ],
+  "proper_nouns": {
+    "names": ["사람 이름들 (정확히)"],
+    "positions": ["목사", "장로", "권사", "집사", "전도사"],
+    "places": ["장소명들"],
+    "numbers": ["중요 숫자들 (금액, 인원, 전화번호)"]
+  },
+  "uncertain_texts": ["불확실한 텍스트들"]
+}
+
+규칙:
+- 모든 섹션을 빠짐없이 추출
+- 이름+직분 조합 주의 (예: "김OO 장로")
+- 숫자(금액, 날짜, 시간) 정확히
+- JSON만 출력, 다른 설명 없이`
+
+/**
+ * VLM으로 주보 직접 구조화 추출
+ * 기존 다중 모델 교차 검증 대신 VLM 직접 추출 사용
+ *
+ * 장점:
+ * 1. 단일 호출로 구조화된 데이터 추출
+ * 2. 레이아웃 이해 기반 섹션 분리
+ * 3. 속도 향상 (교차 검증 단계 생략)
+ */
+export async function extractBulletinWithVLM(
+  base64Image: string,
+  mimeType: string = 'image/jpeg'
+): Promise<{
+  success: boolean
+  provider: string
+  data: {
+    page_type: BulletinPageType
+    sections: BulletinSection[]
+    proper_nouns: {
+      names: string[]
+      positions: string[]
+      places: string[]
+      numbers: string[]
+    }
+    uncertain_texts: string[]
+  }
+  rawResponse: string
+  corrections: string[]
+  duration: number
+}> {
+  const startTime = Date.now()
+  let rawResponse = ''
+  let provider = ''
+
+  // Claude 우선 사용 (한국어 정확도 높음)
+  try {
+    const client = await getAnthropic()
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType as any, data: base64Image } },
+            { type: 'text', text: BULLETIN_VLM_PROMPT }
+          ]
+        }
+      ]
+    })
+
+    const textBlock = response.content.find(block => block.type === 'text')
+    rawResponse = textBlock ? (textBlock as any).text : ''
+    provider = 'Claude'
+  } catch (error: any) {
+    console.log(`[Bulletin VLM] Claude 실패: ${error.message?.substring(0, 50)}`)
+
+    // OpenAI GPT-4o 폴백
+    try {
+      const client = await getOpenAI()
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: BULLETIN_VLM_PROMPT },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Image}`, detail: 'high' }
+              }
+            ]
+          }
+        ],
+        max_tokens: 8000
+      })
+      rawResponse = response.choices[0].message.content || ''
+      provider = 'OpenAI'
+    } catch (openaiError: any) {
+      console.log(`[Bulletin VLM] OpenAI 실패: ${openaiError.message?.substring(0, 50)}`)
+      return {
+        success: false,
+        provider: 'none',
+        data: {
+          page_type: 'unknown',
+          sections: [],
+          proper_nouns: { names: [], positions: [], places: [], numbers: [] },
+          uncertain_texts: []
+        },
+        rawResponse: '',
+        corrections: [],
+        duration: Date.now() - startTime
+      }
+    }
+  }
+
+  // JSON 파싱
+  try {
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      throw new Error('JSON not found in response')
+    }
+
+    const parsed = JSON.parse(jsonMatch[0])
+    const allCorrections: string[] = []
+
+    // 섹션 내용 교정
+    if (parsed.sections && Array.isArray(parsed.sections)) {
+      for (const section of parsed.sections) {
+        if (section.title) {
+          const { correctedText, corrections } = applyBulletinCorrections(section.title)
+          section.title = correctedText
+          allCorrections.push(...corrections)
+        }
+        if (section.content) {
+          const { correctedText, corrections } = applyBulletinCorrections(section.content)
+          section.content = correctedText
+          allCorrections.push(...corrections)
+        }
+        // items 교정
+        if (section.items && Array.isArray(section.items)) {
+          for (const item of section.items) {
+            if (item.value) {
+              const { correctedText, corrections } = applyBulletinCorrections(item.value)
+              item.value = correctedText
+              allCorrections.push(...corrections)
+            }
+          }
+        }
+      }
+    }
+
+    if (allCorrections.length > 0) {
+      console.log(`[Bulletin VLM] 교정 적용: ${allCorrections.join(', ')}`)
+    }
+
+    // 섹션을 BulletinSection 형식으로 변환
+    const sections: BulletinSection[] = (parsed.sections || []).map((s: any) => ({
+      type: mapSectionType(s.type || '기타'),
+      title: s.title || '',
+      content: s.content || '',
+      items: s.items,
+      confidence: parsed.uncertain_texts?.length === 0 ? 0.95 : 0.8,
+      uncertainTexts: []
+    }))
+
+    return {
+      success: true,
+      provider,
+      data: {
+        page_type: mapPageType(parsed.page_type),
+        sections,
+        proper_nouns: parsed.proper_nouns || { names: [], positions: [], places: [], numbers: [] },
+        uncertain_texts: parsed.uncertain_texts || []
+      },
+      rawResponse,
+      corrections: allCorrections,
+      duration: Date.now() - startTime
+    }
+  } catch (parseError: any) {
+    console.error(`[Bulletin VLM] JSON 파싱 실패:`, parseError.message)
+    return {
+      success: false,
+      provider,
+      data: {
+        page_type: 'unknown',
+        sections: [],
+        proper_nouns: { names: [], positions: [], places: [], numbers: [] },
+        uncertain_texts: []
+      },
+      rawResponse,
+      corrections: [],
+      duration: Date.now() - startTime
+    }
+  }
+}
+
+/**
+ * 페이지 유형 매핑
+ */
+function mapPageType(type: string): BulletinPageType {
+  const typeMap: Record<string, BulletinPageType> = {
+    'worship_order': 'worship_order',
+    'church_news': 'church_news',
+    'prayer_requests': 'prayer_requests',
+    'announcements': 'announcements',
+    'mixed': 'mixed',
+  }
+  return typeMap[type] || 'unknown'
+}
+
 // ============ 인터페이스 ============
 
 export type BulletinPageType =
@@ -415,16 +688,57 @@ async function validateNamesInText(text: string): Promise<{
 
 // ============ 메인 분석 함수 ============
 
+// VLM 사용 여부 (환경변수로 제어, 기본값: true)
+const USE_BULLETIN_VLM = process.env.USE_BULLETIN_VLM !== 'false'
+
 /**
  * 주보 페이지 전체 분석
+ *
+ * VLM 모드 (기본): 단일 VLM 호출로 구조화 추출
+ * 레거시 모드: Claude OCR + OpenAI 교차 검증
  */
 export async function analyzeBulletinPage(
   base64Image: string,
   pageNumber: number,
   mimeType: string = 'image/jpeg'
 ): Promise<BulletinPageAnalysis> {
-  console.log(`[Bulletin OCR] 페이지 ${pageNumber} 분석 시작...`)
+  console.log(`[Bulletin OCR] 페이지 ${pageNumber} 분석 시작... (VLM: ${USE_BULLETIN_VLM ? 'ON' : 'OFF'})`)
 
+  // VLM 모드 사용
+  if (USE_BULLETIN_VLM) {
+    const vlmResult = await extractBulletinWithVLM(base64Image, mimeType)
+
+    if (vlmResult.success) {
+      console.log(`[Bulletin VLM] ${vlmResult.provider}로 추출 완료 (${vlmResult.duration}ms)`)
+      console.log(`[Bulletin VLM] 섹션 ${vlmResult.data.sections.length}개, 교정 ${vlmResult.corrections.length}건`)
+
+      // 전체 텍스트 조합
+      const validatedText = vlmResult.data.sections
+        .map(s => `### ${s.title || s.type}\n${s.content}`)
+        .join('\n\n')
+
+      // 경고 수집
+      const warnings: string[] = []
+      if (vlmResult.data.uncertain_texts.length > 0) {
+        warnings.push(`불확실한 텍스트: ${vlmResult.data.uncertain_texts.join(', ')}`)
+      }
+
+      return {
+        pageNumber,
+        pageType: vlmResult.data.page_type,
+        sections: vlmResult.data.sections,
+        rawText: vlmResult.rawResponse,
+        validatedText,
+        properNouns: vlmResult.data.proper_nouns,
+        warnings,
+        overallConfidence: vlmResult.data.uncertain_texts.length === 0 ? 0.95 : 0.8
+      }
+    }
+
+    console.log(`[Bulletin VLM] VLM 실패, 레거시 OCR로 폴백`)
+  }
+
+  // 레거시 OCR 모드 (폴백 또는 VLM 비활성화)
   // 1. 페이지 유형 감지
   const { pageType, sections: expectedSections } = await detectPageType(base64Image, mimeType)
   console.log(`[Bulletin OCR] 페이지 유형: ${pageType}`)

@@ -602,18 +602,18 @@ export default function VerseMapPage() {
             {/* 카드 뷰 */}
             {viewMode === 'card' && (
               <>
-            {/* 중심 구절 카드 - 심플하고 모던하게 */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="text-xl font-bold text-gray-800">
-                  {centerNode.reference}
-                </h3>
-                <span className="px-3 py-1 bg-rose-100/80 text-rose-600 text-xs rounded-full font-medium">
+            {/* 중심 구절 카드 - 두꺼운 테두리, 볼드체 */}
+            <div className="bg-white rounded-2xl border-2 border-rose-400 p-5 shadow-md">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="px-2.5 py-1 bg-rose-500 text-white text-xs rounded-full font-medium">
                   중심 구절
                 </span>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {centerNode.reference}
+                </h3>
               </div>
               {centerNode.content && (
-                <p className="text-gray-700 leading-relaxed text-lg">
+                <p className="text-gray-800 leading-relaxed text-sm font-medium">
                   "{centerNode.content}"
                 </p>
               )}
@@ -678,70 +678,66 @@ export default function VerseMapPage() {
                           )}
                         </div>
 
-                        {/* 연결된 구절 카드들 - 심플하고 모던하게 */}
+                        {/* 연결된 구절 카드들 - 얇은 테두리, 일반 폰트 */}
                         <div className="grid gap-3">
                           {items.map(({ verse, edge }, itemIndex) => {
                             const isExpanded = expandedNodes.has(verse.reference)
                             const subConnected = getConnectedVerses(verse.reference)
                               .filter(v => v.verse.reference !== centerNode.reference)
-                            const isFirstItem = itemIndex === 0  // 첫 번째 항목인지 확인
 
                             return (
                               <div
                                 key={verse.reference}
-                                className={`bg-white rounded-xl border overflow-hidden hover:shadow-md transition-shadow ${
-                                  isFirstItem ? 'border-gray-200 shadow-sm' : 'border-gray-100'
-                                }`}
+                                className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
                               >
                                 {/* 카드 헤더 */}
                                 <div
-                                  className={`cursor-pointer ${isFirstItem ? 'p-5' : 'p-4'}`}
+                                  className="cursor-pointer p-4"
                                   onClick={() => toggleExpand(verse.reference)}
                                 >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <h4 className={`font-semibold text-gray-800 ${isFirstItem ? 'text-lg' : ''}`}>
-                                          {verse.reference}
-                                        </h4>
-                                        {subConnected.length > 0 && (
-                                          <span className="text-xs text-gray-400">
-                                            +{subConnected.length}개 연결
-                                          </span>
-                                        )}
-                                      </div>
-                                      {verse.content && (
-                                        <p className={`text-gray-600 leading-relaxed ${isFirstItem ? 'text-base' : 'text-sm'}`}>
-                                          "{isFirstItem
-                                            ? verse.content  // 첫 번째 항목은 전체 내용 표시
-                                            : (verse.content.length > 150
-                                              ? verse.content.substring(0, 150) + '...'
-                                              : verse.content)}"
-                                        </p>
+                                  {/* 상단: 구절 제목 + 연결 수 + 확장 아이콘 */}
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-medium text-gray-800 text-sm">
+                                        {verse.reference}
+                                      </h4>
+                                      {subConnected.length > 0 && (
+                                        <span className="text-xs text-gray-400">
+                                          +{subConnected.length}개 연결
+                                        </span>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-2 ml-3">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          handleVerseClick(verse.reference)
-                                        }}
-                                        className="px-3 py-1 bg-rose-50 text-rose-600 rounded-lg text-xs hover:bg-rose-100 transition-colors"
-                                      >
-                                        여기서 탐색
-                                      </button>
-                                      <span className="text-gray-300 text-lg">
-                                        {isExpanded ? '▼' : '▶'}
-                                      </span>
-                                    </div>
+                                    <span className="text-gray-300 text-sm">
+                                      {isExpanded ? '▼' : '▶'}
+                                    </span>
                                   </div>
 
-                                  {/* 관계 설명 (OpenBible 상호참조 텍스트는 숨김) */}
-                                  {edge.description && !edge.description.includes('OpenBible') && !edge.description.includes('상호참조') && (
-                                    <p className="text-xs text-gray-400 mt-2 pl-2 border-l-2 border-gray-200">
-                                      {edge.description}
+                                  {/* 본문 - 텍스트가 전체 너비 사용 */}
+                                  {verse.content && (
+                                    <p className="text-gray-600 leading-relaxed text-sm w-full">
+                                      "{verse.content}"
                                     </p>
                                   )}
+
+                                  {/* 하단: 탐색 버튼 */}
+                                  <div className="mt-3 flex items-center justify-between">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleVerseClick(verse.reference)
+                                      }}
+                                      className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs hover:bg-rose-100 transition-colors"
+                                    >
+                                      여기서 탐색
+                                    </button>
+
+                                    {/* 관계 설명 (OpenBible 상호참조 텍스트는 숨김) */}
+                                    {edge.description && !edge.description.includes('OpenBible') && !edge.description.includes('상호참조') && (
+                                      <p className="text-xs text-gray-400 truncate max-w-[60%]">
+                                        {edge.description}
+                                      </p>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {/* 확장 시 2단계 연결 */}

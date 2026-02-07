@@ -140,6 +140,266 @@ function getSupabase() {
   return supabase
 }
 
+// ============ 알려진 OCR 오류 교정 패턴 ============
+
+const KNOWN_OCR_CORRECTIONS: Array<{ pattern: RegExp; replacement: string }> = [
+  // 신문 이름 오류
+  { pattern: /월\s*한\s*시/g, replacement: '열한시' },
+  { pattern: /월한세/g, replacement: '열한시' },
+  { pattern: /월간지/g, replacement: '열한시' },  // 문맥에 따라 조정 필요
+  { pattern: /열\s*한\s*시/g, replacement: '열한시' },
+
+  // 장소명 오류
+  { pattern: /한나홀/g, replacement: '만나홀' },
+  { pattern: /만나를/g, replacement: '만나홀' },
+
+  // 직함 오류
+  { pattern: /위원목사/g, replacement: '위임목사' },
+  { pattern: /우임목사/g, replacement: '위임목사' },
+
+  // 일반적인 한글 혼동
+  { pattern: /요즘형/g, replacement: '요르단' },
+]
+
+/**
+ * 알려진 OCR 오류 패턴을 교정
+ */
+function applyKnownCorrections(text: string): { correctedText: string; corrections: string[] } {
+  let correctedText = text
+  const corrections: string[] = []
+
+  for (const { pattern, replacement } of KNOWN_OCR_CORRECTIONS) {
+    const matches = correctedText.match(pattern)
+    if (matches) {
+      corrections.push(`${matches[0]} → ${replacement}`)
+      correctedText = correctedText.replace(pattern, replacement)
+    }
+  }
+
+  return { correctedText, corrections }
+}
+
+// ============ VLM 직접 구조화 추출 ============
+
+/**
+ * VLM 직접 구조화 추출 프롬프트
+ * 전통적인 OCR 대신 VLM이 직접 구조화된 JSON을 출력
+ */
+const VLM_STRUCTURED_EXTRACTION_PROMPT = `이 이미지는 한국 교회 월간 신문의 한 면입니다.
+
+중요 지시사항:
+1. 신문 이름은 "열한시"입니다 (11시를 한글로 쓴 것)
+2. 텍스트를 정확하게 읽되, 추측하지 마세요
+3. 불확실한 글자는 [?]로 표시
+
+이미지의 모든 텍스트를 분석하여 다음 JSON 형식으로 출력해주세요:
+
+{
+  "newspaper_name": "열한시",
+  "page_header": "페이지 상단 헤더 텍스트 (있는 경우)",
+  "articles": [
+    {
+      "title": "기사 제목 (정확히)",
+      "subtitle": "부제목 (있는 경우, 없으면 null)",
+      "type": "목회편지 | 교회소식 | 행사안내 | 인물소개 | 광고 | 사설 | 기타",
+      "author": "기고자/필자 이름 (있는 경우)",
+      "content": "본문 전체 내용 (줄바꿈 유지, 정확하게)",
+      "position": "상단 | 중단 | 하단 | 좌측 | 우측 | 전면"
+    }
+  ],
+  "advertisements": [
+    {
+      "title": "광고 제목",
+      "content": "광고 내용",
+      "contact": "연락처 (있는 경우)"
+    }
+  ],
+  "footer": "페이지 하단 정보 (있는 경우)"
+}
+
+규칙:
+- 모든 기사를 빠짐없이 추출
+- 사진 캡션도 해당 기사 content에 포함
+- 광고는 별도 배열로 분리
+- JSON만 출력, 다른 설명 없이`
+
+/**
+ * VLM으로 직접 구조화된 데이터 추출 (OCR 우회)
+ *
+ * 장점:
+ * 1. VLM이 레이아웃을 이해하고 기사 단위로 직접 분리
+ * 2. 문맥을 고려한 텍스트 인식 (신문 이름, 직함 등)
+ * 3. 별도의 기사 분리/메타데이터 추출 단계 불필요
+ */
+export async function extractStructuredWithVLM(
+  imageData: Buffer | string,
+  mimeType: string = 'image/jpeg'
+): Promise<{
+  success: boolean
+  provider: string
+  data: {
+    newspaper_name: string
+    page_header?: string
+    articles: Array<{
+      title: string
+      subtitle?: string
+      type: string
+      author?: string
+      content: string
+      position: string
+    }>
+    advertisements?: Array<{
+      title: string
+      content: string
+      contact?: string
+    }>
+    footer?: string
+  }
+  rawResponse: string
+  corrections: string[]
+}> {
+  const base64 = Buffer.isBuffer(imageData) ? imageData.toString('base64') : imageData
+
+  // Claude 우선 사용 (한국어 인식 정확도 높음)
+  let rawResponse = ''
+  let provider = ''
+
+  try {
+    const client = await getAnthropic()
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType as any, data: base64 } },
+            { type: 'text', text: VLM_STRUCTURED_EXTRACTION_PROMPT }
+          ]
+        }
+      ]
+    })
+
+    const textBlock = response.content.find(block => block.type === 'text')
+    rawResponse = textBlock ? (textBlock as any).text : ''
+    provider = 'Claude'
+  } catch (error: any) {
+    console.log(`[VLM Structured] Claude 실패: ${error.message?.substring(0, 50)}`)
+
+    // OpenAI GPT-4o 폴백
+    try {
+      const client = await getOpenAI()
+      const response = await client.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: VLM_STRUCTURED_EXTRACTION_PROMPT },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64}`, detail: 'high' }
+              }
+            ]
+          }
+        ],
+        max_tokens: 8000
+      })
+      rawResponse = response.choices[0].message.content || ''
+      provider = 'OpenAI'
+    } catch (openaiError: any) {
+      console.log(`[VLM Structured] OpenAI 실패: ${openaiError.message?.substring(0, 50)}`)
+      return {
+        success: false,
+        provider: 'none',
+        data: { newspaper_name: '', articles: [] },
+        rawResponse: '',
+        corrections: []
+      }
+    }
+  }
+
+  // JSON 파싱
+  try {
+    const jsonMatch = rawResponse.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      throw new Error('JSON not found in response')
+    }
+
+    const parsed = JSON.parse(jsonMatch[0])
+
+    // 알려진 오류 교정 적용
+    const allCorrections: string[] = []
+
+    // 신문 이름 교정
+    if (parsed.newspaper_name) {
+      const { correctedText, corrections } = applyKnownCorrections(parsed.newspaper_name)
+      parsed.newspaper_name = correctedText
+      allCorrections.push(...corrections)
+    }
+
+    // 각 기사 내용 교정
+    if (parsed.articles && Array.isArray(parsed.articles)) {
+      for (const article of parsed.articles) {
+        if (article.title) {
+          const { correctedText, corrections } = applyKnownCorrections(article.title)
+          article.title = correctedText
+          allCorrections.push(...corrections)
+        }
+        if (article.content) {
+          const { correctedText, corrections } = applyKnownCorrections(article.content)
+          article.content = correctedText
+          allCorrections.push(...corrections)
+        }
+        if (article.author) {
+          const { correctedText, corrections } = applyKnownCorrections(article.author)
+          article.author = correctedText
+          allCorrections.push(...corrections)
+        }
+      }
+    }
+
+    if (allCorrections.length > 0) {
+      console.log(`[VLM Structured] 교정 적용: ${allCorrections.join(', ')}`)
+    }
+
+    return {
+      success: true,
+      provider,
+      data: parsed,
+      rawResponse,
+      corrections: allCorrections
+    }
+  } catch (parseError: any) {
+    console.error(`[VLM Structured] JSON 파싱 실패:`, parseError.message)
+    return {
+      success: false,
+      provider,
+      data: { newspaper_name: '', articles: [] },
+      rawResponse,
+      corrections: []
+    }
+  }
+}
+
+/**
+ * VLM 구조화 추출 결과를 기존 형식으로 변환
+ */
+export function convertVLMResultToArticles(
+  vlmResult: Awaited<ReturnType<typeof extractStructuredWithVLM>>
+): ExtractedArticle[] {
+  if (!vlmResult.success || !vlmResult.data.articles) {
+    return []
+  }
+
+  return vlmResult.data.articles.map(article => ({
+    title: article.title || '제목 없음',
+    content: article.content || '',
+    article_type: article.type,
+    speaker: article.author
+  }))
+}
+
 // OCR 프롬프트 - 정확성 강조 버전
 const OCR_PROMPT = `이 이미지는 한국 교회의 월간 신문 "열한시"의 한 면입니다.
 
@@ -997,6 +1257,122 @@ export async function processImageToArticles(
   }
 
   return { articles: articleCount, chunks: chunkCount }
+}
+
+// ============ VLM 직접 추출 파이프라인 ============
+
+/**
+ * VLM 직접 추출을 사용한 이미지 처리
+ *
+ * 기존 OCR 방식과의 차이점:
+ * 1. VLM이 레이아웃을 분석하고 기사 단위로 직접 추출
+ * 2. 별도의 기사 분리 단계 불필요
+ * 3. 알려진 오류 패턴 자동 교정
+ * 4. 검증 단계 불필요 (구조화된 출력이므로)
+ */
+export async function processImageWithVLM(
+  imageData: Buffer,
+  issueId: number,
+  issueNumber: number,
+  issueDate: string,
+  pageNumber: number,
+  mimeType: string = 'image/jpeg',
+  onProgress?: (step: string) => void
+): Promise<{
+  articles: number
+  chunks: number
+  provider: string
+  corrections: string[]
+}> {
+  let articleCount = 0
+  let chunkCount = 0
+
+  // 1. VLM 직접 구조화 추출
+  onProgress?.('VLM 구조화 추출 중...')
+  const vlmResult = await extractStructuredWithVLM(imageData, mimeType)
+
+  if (!vlmResult.success) {
+    console.log('[VLM Process] VLM 추출 실패, 기존 OCR로 폴백')
+    // 기존 OCR 방식으로 폴백
+    const fallbackResult = await processImageToArticles(
+      imageData, issueId, issueNumber, issueDate, pageNumber, mimeType, onProgress
+    )
+    return { ...fallbackResult, provider: 'OCR-fallback', corrections: [] }
+  }
+
+  console.log(`[VLM Process] ${vlmResult.provider}로 추출 완료, ${vlmResult.data.articles.length}개 기사`)
+
+  // 2. 전체 텍스트 조합 (OCR 텍스트 저장용)
+  const fullOCRText = vlmResult.data.articles
+    .map(a => `### ${a.title}\n유형: ${a.type}\n${a.content}`)
+    .join('\n\n---\n\n')
+
+  // 3. 페이지 저장
+  const pageId = await saveNewsPage({
+    issue_id: issueId,
+    page_number: pageNumber,
+    file_hash: generateFileHash(imageData),
+    ocr_text: fullOCRText,
+    ocr_provider: `VLM-${vlmResult.provider}`,
+    status: 'completed'
+  })
+
+  // 4. 각 기사 처리
+  for (const article of vlmResult.data.articles) {
+    onProgress?.(`기사 저장 중: ${article.title.substring(0, 20)}...`)
+
+    // 기사 저장 (이미 구조화된 데이터 사용)
+    const articleId = await saveNewsArticle({
+      issue_id: issueId,
+      page_id: pageId,
+      title: article.title,
+      content: article.content,
+      article_type: article.type,
+      speaker: article.author
+    })
+    articleCount++
+
+    // 청킹
+    onProgress?.('청킹 중...')
+    const chunks = chunkText(article.content)
+
+    if (chunks.length > 0) {
+      onProgress?.('임베딩 생성 중...')
+      try {
+        const embeddings = await createBatchEmbeddings(chunks)
+
+        const saveCount = Math.min(chunks.length, embeddings.length)
+        for (let i = 0; i < saveCount; i++) {
+          await saveNewsChunk({
+            article_id: articleId,
+            issue_id: issueId,
+            chunk_index: i,
+            chunk_text: chunks[i],
+            issue_number: issueNumber,
+            issue_date: issueDate,
+            page_number: pageNumber,
+            article_title: article.title,
+            article_type: article.type,
+            embedding: embeddings[i]
+          })
+          chunkCount++
+        }
+      } catch (embeddingError) {
+        if (embeddingError instanceof EmbeddingQuotaError) {
+          throw embeddingError
+        }
+        console.error(`[VLM Process] 임베딩 실패:`, embeddingError)
+        throw embeddingError
+      }
+    }
+  }
+
+  return {
+    articles: articleCount,
+    chunks: chunkCount,
+    provider: vlmResult.provider,
+    corrections: vlmResult.corrections
+  }
 }
 
 // ============ 개선된 OCR 통합 (고급 분석 모듈 사용) ============
