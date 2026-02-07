@@ -896,7 +896,7 @@ export default function Home() {
   ]
 
   return (
-    <div className="relative flex flex-col h-screen overflow-hidden">
+    <div className="relative flex flex-col h-dvh overflow-hidden">
       {/* 뉴스 상세 팝업 */}
       <NewsDetailPopup news={selectedNews} onClose={() => setSelectedNews(null)} />
 
