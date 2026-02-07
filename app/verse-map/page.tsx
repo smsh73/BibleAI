@@ -184,6 +184,14 @@ export default function VerseMapPage() {
   // 뷰 모드 (카드 뷰 vs 그래프 뷰)
   const [viewMode, setViewMode] = useState<ViewMode>('card')
 
+  // 목사님 강해 관련 상태
+  const [commentaryLoading, setCommentaryLoading] = useState(false)
+  const [commentary, setCommentary] = useState<{ text: string; sources: any[]; provider: string } | null>(null)
+  const [commentaryExpanded, setCommentaryExpanded] = useState(false)
+  const [commentaryAudio, setCommentaryAudio] = useState<string | null>(null)
+  const [audioLoading, setAudioLoading] = useState(false)
+  const [commentaryNotFound, setCommentaryNotFound] = useState(false)
+
   // URL 파라미터에서 reference 읽기
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -194,10 +202,72 @@ export default function VerseMapPage() {
     }
   }, [])
 
+  // 강해 로드
+  async function loadCommentary(reference: string) {
+    setCommentaryLoading(true)
+    setCommentaryNotFound(false)
+    setCommentary(null)
+    setCommentaryAudio(null)
+
+    try {
+      const res = await fetch('/api/sermon-commentary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference })
+      })
+      const data = await res.json()
+
+      if (data.found && data.commentary) {
+        setCommentary({
+          text: data.commentary,
+          sources: data.sources || [],
+          provider: data.provider || ''
+        })
+        setCommentaryExpanded(true)
+      } else {
+        setCommentaryNotFound(true)
+      }
+    } catch {
+      setCommentaryNotFound(true)
+    } finally {
+      setCommentaryLoading(false)
+    }
+  }
+
+  // 강해 TTS 음성 생성
+  async function generateCommentaryAudio(text: string, reference: string) {
+    setAudioLoading(true)
+    try {
+      const res = await fetch('/api/generate-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: reference,
+          answer: text,
+          verseReferences: [reference]
+        })
+      })
+      const data = await res.json()
+      if (data.success && data.audioUrl) {
+        setCommentaryAudio(data.audioUrl)
+      }
+    } catch (err) {
+      console.error('TTS 생성 실패:', err)
+    } finally {
+      setAudioLoading(false)
+    }
+  }
+
   // 그래프 데이터 로드 (개역개정 버전만)
   async function loadGraph(reference: string) {
     setLoading(true)
     setError(null)
+    // 강해 상태 초기화
+    setCommentary(null)
+    setCommentaryExpanded(false)
+    setCommentaryAudio(null)
+    setCommentaryNotFound(false)
+    setCommentaryLoading(false)
 
     try {
       const res = await fetch(
@@ -446,10 +516,10 @@ export default function VerseMapPage() {
                         key={book.name}
                         onClick={() => handleBookClick(book)}
                         className={`
-                          px-2 py-2 rounded-lg text-[15px] font-medium transition-all
+                          px-2 py-2 rounded-lg text-[15px] font-semibold transition-all
                           ${isSelected
-                            ? 'bg-amber-50 text-amber-700 border-2 border-amber-400 shadow-sm'
-                            : 'bg-white border border-gray-300 text-gray-700 hover:border-amber-400 hover:bg-amber-50'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-500 shadow-sm'
+                            : 'bg-white border border-gray-200 text-gray-700 hover:border-amber-400 hover:bg-amber-50'
                           }
                         `}
                         title={book.name}
@@ -479,7 +549,7 @@ export default function VerseMapPage() {
                     </div>
 
                     {/* 장 그리드 */}
-                    <div className="grid grid-cols-8 gap-1 mb-3">
+                    <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 mb-3">
                       {selectedBook.chapters.map((verseCount, idx) => {
                         const chapter = idx + 1
                         const isChapterSelected = selectedChapter === chapter
@@ -489,10 +559,10 @@ export default function VerseMapPage() {
                             key={chapter}
                             onClick={() => handleChapterClick(chapter)}
                             className={`
-                              w-full py-2 rounded-lg text-[15px] font-medium transition-all
+                              w-full py-1.5 sm:py-2 rounded-lg text-[15px] font-semibold transition-all
                               ${isChapterSelected
-                                ? 'bg-amber-50 text-amber-700 border-2 border-amber-400 shadow-sm'
-                                : 'bg-white text-gray-700 border border-gray-300 hover:border-amber-400 hover:bg-amber-50'
+                                ? 'bg-amber-50 text-amber-700 border border-amber-500 shadow-sm'
+                                : 'bg-white text-gray-700 border border-gray-200 hover:border-amber-400 hover:bg-amber-50'
                               }
                             `}
                           >
@@ -508,12 +578,12 @@ export default function VerseMapPage() {
                         <p className="text-xs text-gray-500 mb-2">
                           {selectedBook.name} {selectedChapter}{language === 'en' ? ':' : '장'} - {language === 'en' ? 'Select verse' : '절 선택'}
                         </p>
-                        <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                        <div className="grid grid-cols-5 sm:grid-cols-8 gap-1 max-h-48 overflow-y-auto">
                           {Array.from({ length: selectedBook.chapters[selectedChapter - 1] }, (_, i) => i + 1).map((verse) => (
                             <button
                               key={verse}
                               onClick={() => handleVerseSelect(selectedBook, selectedChapter, verse)}
-                              className="w-full py-2 rounded-lg text-[15px] font-medium transition-all bg-white border border-gray-300 text-gray-700 hover:border-amber-400 hover:bg-amber-50"
+                              className="w-full py-1.5 sm:py-2 rounded-lg text-[15px] font-semibold transition-all bg-white border border-gray-200 text-gray-700 hover:border-amber-400 hover:bg-amber-50"
                             >
                               {verse}
                             </button>
@@ -631,6 +701,111 @@ export default function VerseMapPage() {
                       #{theme}
                     </span>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* 목사님 강해보기 섹션 */}
+            <div className="space-y-0">
+              {/* 강해보기 버튼 */}
+              {!commentary && !commentaryLoading && !commentaryNotFound && (
+                <button
+                  onClick={() => loadCommentary(centerNode.reference)}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors text-sm font-medium"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  목사님 강해보기
+                </button>
+              )}
+
+              {/* 로딩 상태 */}
+              {commentaryLoading && (
+                <div className="flex items-center justify-center gap-2 px-4 py-6 bg-amber-50/50 border border-amber-100 rounded-xl">
+                  <div className="animate-spin w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full" />
+                  <span className="text-sm text-amber-600">설교에서 강해를 찾고 있습니다...</span>
+                </div>
+              )}
+
+              {/* 관련 설교 없음 */}
+              {commentaryNotFound && (
+                <div className="text-center px-4 py-4 bg-gray-50 border border-gray-100 rounded-xl">
+                  <p className="text-sm text-gray-500">이 구절에 대한 설교 강해를 찾지 못했습니다.</p>
+                </div>
+              )}
+
+              {/* 강해 콘텐츠 (접기/펼치기) */}
+              {commentary && (
+                <div className="border border-amber-200 rounded-xl overflow-hidden bg-white">
+                  {/* 헤더 - 접기/펼치기 토글 */}
+                  <button
+                    onClick={() => setCommentaryExpanded(!commentaryExpanded)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-amber-50 hover:bg-amber-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                      <span className="text-sm font-medium text-amber-700">목사님 강해</span>
+                      <span className="text-xs text-amber-500">({commentary.provider})</span>
+                    </div>
+                    <span className="text-amber-400 text-sm">{commentaryExpanded ? '▼' : '▶'}</span>
+                  </button>
+
+                  {/* 본문 (애니메이션 접기/펼치기) */}
+                  <div
+                    className="transition-all duration-300 ease-in-out overflow-hidden"
+                    style={{ maxHeight: commentaryExpanded ? '2000px' : '0px', opacity: commentaryExpanded ? 1 : 0 }}
+                  >
+                    <div className="p-4 space-y-4">
+                      {/* 강해 텍스트 */}
+                      <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                        {commentary.text}
+                      </div>
+
+                      {/* 출처 설교 정보 */}
+                      {commentary.sources.length > 0 && (
+                        <div className="border-t border-amber-100 pt-3">
+                          <p className="text-xs text-gray-400 mb-2">출처 설교</p>
+                          <div className="space-y-1">
+                            {commentary.sources.map((s: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-gray-500">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
+                                <span className="truncate">{s.title}{s.speaker ? ` (${s.speaker})` : ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 음성 듣기 섹션 */}
+                      <div className="border-t border-amber-100 pt-3">
+                        {!commentaryAudio && !audioLoading && (
+                          <button
+                            onClick={() => generateCommentaryAudio(commentary.text, centerNode.reference)}
+                            className="flex items-center gap-2 px-3 py-2 bg-amber-50 text-amber-600 rounded-lg text-xs hover:bg-amber-100 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            </svg>
+                            음성으로 듣기
+                          </button>
+                        )}
+                        {audioLoading && (
+                          <div className="flex items-center gap-2 text-xs text-amber-500">
+                            <div className="animate-spin w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full" />
+                            음성을 생성하고 있습니다...
+                          </div>
+                        )}
+                        {commentaryAudio && (
+                          <audio controls src={commentaryAudio} className="w-full h-10">
+                            Your browser does not support the audio element.
+                          </audio>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
