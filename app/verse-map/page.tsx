@@ -203,7 +203,7 @@ export default function VerseMapPage() {
   }, [])
 
   // 강해 로드
-  async function loadCommentary(reference: string) {
+  async function loadCommentary(reference: string, verseContent?: string) {
     setCommentaryLoading(true)
     setCommentaryNotFound(false)
     setCommentary(null)
@@ -213,7 +213,7 @@ export default function VerseMapPage() {
       const res = await fetch('/api/sermon-commentary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reference })
+        body: JSON.stringify({ reference, verseContent })
       })
       const data = await res.json()
 
@@ -710,7 +710,7 @@ export default function VerseMapPage() {
               {/* 강해보기 버튼 */}
               {!commentary && !commentaryLoading && !commentaryNotFound && (
                 <button
-                  onClick={() => loadCommentary(centerNode.reference)}
+                  onClick={() => loadCommentary(centerNode.reference, centerNode.content)}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors text-sm font-medium"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
