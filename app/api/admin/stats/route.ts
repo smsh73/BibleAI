@@ -43,10 +43,11 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
       .not('embedding', 'is', null)
 
-    // 설교 통계
+    // 설교 통계 (완료된 것만)
     const { count: sermons } = await getSupabase()
       .from('sermons')
       .select('*', { count: 'exact', head: true })
+      .eq('processing_status', 'completed')
 
     const { count: sermonChunks } = await getSupabase()
       .from('sermon_chunks')

@@ -28,7 +28,9 @@ import {
   filterProcessedVideos,
   uploadSermonChunksWithRetry,
   saveSermonMetadata,
-  updateSermonStatus
+  updateSermonStatus,
+  getSupabaseAdmin,
+  getSupabase
 } from '@/lib/supabase'
 
 export interface PlaylistProcessResult {
@@ -345,12 +347,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 이미 처리된 동영상 필터링
+    // 이미 처리된 동영상 필터링 (video_id 기반)
     const videoIds = videos.map(v => v.videoId)
     const { processed: alreadyProcessed, pending: pendingVideos } =
       await filterProcessedVideos(videoIds)
 
-    console.log(`[Playlist] 총 ${videos.length}개 중 ${alreadyProcessed.length}개 이미 처리됨, ${pendingVideos.length}개 처리 가능`)
+    // 제목 기반 중복 필터링 (같은 제목의 설교가 이미 있으면 스킵)
+    let titleDuplicates: string[] = []
+    try {
+      const { data: existingSermons } = await (getSupabaseAdmin() || getSupabase())!
+        .from('sermons')
+        .select('video_title')
+        .eq('processing_status', 'completed')
+        .gt('chunk_count', 0)
+
+      if (existingSermons) {
+        const existingTitles = new Set(existingSermons.map((s: any) => s.video_title))
+        titleDuplicates = videos
+          .filter(v => !alreadyProcessed.includes(v.videoId) && existingTitles.has(v.title))
+          .map(v => v.videoId)
+        if (titleDuplicates.length > 0) {
+          console.log(`[Playlist] 제목 중복으로 추가 스킵: ${titleDuplicates.length}개`)
+        }
+      }
+    } catch (e) {
+      console.warn('[Playlist] 제목 중복 체크 실패, 계속 진행:', e)
+    }
+
+    console.log(`[Playlist] 총 ${videos.length}개 중 ${alreadyProcessed.length}개 이미 처리됨, ${titleDuplicates.length}개 제목 중복, ${pendingVideos.length - titleDuplicates.length}개 처리 가능`)
 
     // 처리 결과
     const results: PlaylistProcessResult['results'] = []
@@ -369,6 +393,18 @@ export async function POST(req: NextRequest) {
       // 이미 처리된 동영상은 스킵 (카운트하지 않음)
       if (alreadyProcessed.includes(video.videoId)) {
         console.log(`[Playlist] 스킵 (이미 처리됨): ${video.title}`)
+        results.push({
+          videoId: video.videoId,
+          title: video.title,
+          status: 'skipped'
+        })
+        skippedCount++
+        continue
+      }
+
+      // 제목 중복 동영상 스킵 (같은 설교가 이미 추출 완료됨)
+      if (titleDuplicates.includes(video.videoId)) {
+        console.log(`[Playlist] 스킵 (제목 중복): ${video.title}`)
         results.push({
           videoId: video.videoId,
           title: video.title,
